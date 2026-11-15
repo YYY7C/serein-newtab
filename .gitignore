@@ -1,0 +1,26 @@
+# 本项目零依赖、零构建，下面几行是为了将来万一误提交时兜住
+
+node_modules/
+dist/
+build/
+
+# 本地预览与截图（我调试 UI 时会临时生成）
+.shots/
+*.local.*
+
+# 日志
+*.log
+npm-debug.log*
+yarn-error.log*
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 打包产物：扩展商店上传用的 zip 不入库
+*.zip
+*.crx
+*.pem
