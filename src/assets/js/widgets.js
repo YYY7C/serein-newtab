@@ -7,7 +7,6 @@
 import { $, h, clear, svgIcon, debounce, relativeTime } from './util.js';
 import * as store from './store.js';
 import { weatherIconInline, weatherLabel, refreshWeather, searchCity, HOT_CITIES } from './weather.js';
-import { openModal } from './modals.js';
 import { faviconUrl } from './icons.js';
 
 let sidebarEl = null;
@@ -209,7 +208,7 @@ function startWeatherTimer() {
 
 /* ------------------------------------------------------------- 城市选择 */
 
-function openCityPicker() {
+async function openCityPicker() {
   const input = h('input', { class: 'text-input', type: 'text', placeholder: '搜索城市，例如：杭州' });
   const results = h('div', { class: 'link-list', style: { maxHeight: '240px', marginTop: '10px' } });
   const hotRow = h('div', { class: 'btn-row', style: { marginTop: '12px' } });
@@ -259,7 +258,7 @@ function openCityPicker() {
     hotRow
   );
 
-  const modal = openModal({ title: '选择城市', body, footer: [] });
+  const modal = (await import('./modals.js')).openModal({ title: '选择城市', body, footer: [] });
   setTimeout(() => input.focus(), 80);
 }
 

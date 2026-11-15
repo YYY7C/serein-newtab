@@ -43,10 +43,11 @@ export function openModal(options) {
   if (footer.length) card.appendChild(h('div', { class: 'modal-foot' }, ...footer));
 
   document.body.appendChild(layer);
-  requestAnimationFrame(() => {
-    scrim.classList.add('is-open');
-    layer.classList.add('is-open');
-  });
+  // 先强制一次样式计算再挂 is-open：过渡有起点，立即生效。
+  // 用 rAF 会在后台标签页被节流，弹窗要等页面重新可见才出现。
+  void layer.offsetWidth;
+  scrim.classList.add('is-open');
+  layer.classList.add('is-open');
 
   const entry = { layer, close, z: 0 };
   stack.push(entry);
@@ -186,6 +187,7 @@ const EMOJIS = [
 
 const ICON_TABS = [
   { id: 'auto', label: '自动' },
+  { id: 'favicon', label: '网站图标' },
   { id: 'emoji', label: '表情' },
   { id: 'text', label: '文字' },
   { id: 'url', label: '图片链接' },
@@ -223,8 +225,9 @@ export function shortcutEditor({ shortcut = null, groups = [], defaultGroupId = 
       clear(previewBox);
       const descriptor = resolveIcon(
         { title: draft.title || 'A', url: draft.url || 'https://example.com', iconType: draft.iconType, iconValue: draft.iconValue },
-        { useFavicon: draft.iconType === 'auto' || draft.iconType === 'favicon' }
+        { useFavicon: draft.iconType === 'auto' || draft.iconType === 'favicon', iconStyle: 'brand' }
       );
+      previewBox.classList.toggle('is-brand', Boolean(descriptor.brand));
 
       if (descriptor.emoji) {
         previewBox.style.background = 'var(--input-bg)';
@@ -233,15 +236,23 @@ export function shortcutEditor({ shortcut = null, groups = [], defaultGroupId = 
         return;
       }
 
-      previewBox.style.background = `linear-gradient(145deg, ${descriptor.from}, ${descriptor.to})`;
-      previewBox.appendChild(h('span', { class: 'mono-text', text: descriptor.text }));
+      if (descriptor.brand) {
+        previewBox.style.background = 'transparent';
+        previewMeta.textContent = '内置矢量品牌图标，离线可用';
+      } else {
+        previewBox.style.background = `linear-gradient(145deg, ${descriptor.from}, ${descriptor.to})`;
+        previewBox.appendChild(h('span', { class: 'mono-text', text: descriptor.text }));
+      }
 
       const src = uploadedObjectUrl || descriptor.src;
       if (src) {
         const img = h('img', { src, alt: '' });
         img.addEventListener('error', () => img.remove());
         previewBox.appendChild(img);
-        previewMeta.textContent = draft.iconType === 'file' ? '本地上传的图标' : '自动抓取网站图标，失败时使用字符徽标';
+        if (!descriptor.brand) {
+          previewMeta.textContent =
+            draft.iconType === 'file' ? '本地上传的图标' : '自动抓取网站图标，失败时使用字符徽标';
+        }
       } else {
         previewMeta.textContent = draft.iconType === 'file' ? '尚未选择图片' : '字符徽标（无网络时也能正常显示）';
       }
@@ -358,11 +369,18 @@ export function shortcutEditor({ shortcut = null, groups = [], defaultGroupId = 
         button.classList.toggle('is-active', button.dataset.tab === draft.iconType);
       });
       clear(iconPanel);
-      if (draft.iconType === 'auto' || draft.iconType === 'favicon') {
+      if (draft.iconType === 'auto') {
         iconPanel.appendChild(
           h('div', {
             class: 'field-hint',
-            text: '自动模式会优先使用 Chrome 本地缓存的站点图标，离线或抓取失败时退回品牌色字符徽标。',
+            text: '自动：先找内置矢量品牌图标（离线、清晰），没有再取 Chrome 缓存的站点图标，最后退回品牌色字符徽标。',
+          })
+        );
+      } else if (draft.iconType === 'favicon') {
+        iconPanel.appendChild(
+          h('div', {
+            class: 'field-hint',
+            text: '只使用 Chrome 本地缓存的站点图标，不与内置品牌图标合并。',
           })
         );
       } else if (draft.iconType === 'emoji') {

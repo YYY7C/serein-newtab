@@ -12,31 +12,65 @@ import { initClock, refreshClock } from './clock.js';
 import { initSearch } from './search.js';
 import { initTiles } from './tiles.js';
 import { initWidgets } from './widgets.js';
-import { initSettings } from './settings.js';
 import { requestPersistentStorage } from './storage.js';
 
 /* --------------------------------------------------------------- 提示条 */
 
 const toastRoot = $('#toast-root');
 
-function showToast({ text, error = false }) {
+function showToast({ text, error = false, action = null }) {
   if (!toastRoot || !text) return;
   const node = h(
     'div',
-    { class: 'toast' },
+    { class: `toast${action ? ' has-action' : ''}` },
     h('span', { class: error ? 'dot-err' : 'dot-ok' }),
-    h('span', { text })
+    h('span', { class: 'toast-text', text })
   );
+  if (action) {
+    node.appendChild(
+      h('button', {
+        class: 'toast-action',
+        type: 'button',
+        text: action.label || '撤销',
+        onclick: () => {
+          action.onClick?.();
+          node.remove();
+        },
+      })
+    );
+  }
   toastRoot.appendChild(node);
+  const life = action ? 6000 : 2200;
   setTimeout(() => {
+    if (!node.isConnected) return;
     node.classList.add('is-leaving');
     setTimeout(() => node.remove(), 260);
-  }, 2200);
+  }, life);
 
   while (toastRoot.children.length > 3) toastRoot.firstElementChild.remove();
 }
 
 bus.on('toast', showToast);
+
+/* ------------------------------------------------------------- 设置面板
+ * 设置面板 + 各类弹窗合计约 60 KB，首屏用不到，
+ * 改成首次打开时才拉取，减少新标签页的启动解析量。
+ */
+
+let settingsModule = null;
+
+async function openSettings(tab) {
+  try {
+    settingsModule ||= await import('./settings.js');
+    settingsModule.open(tab);
+  } catch (err) {
+    console.error('[lumen] 设置面板加载失败', err);
+    showToast({ text: '设置面板加载失败，请刷新页面', error: true });
+  }
+}
+
+bus.on('openSettings', (payload) => openSettings(payload?.tab));
+document.addEventListener('lumen:open-settings', () => openSettings());
 
 /* --------------------------------------------------------------- 顶栏 */
 
@@ -101,7 +135,6 @@ function boot() {
   initSearch();
   initTiles();
   initWidgets();
-  initSettings();
 
   renderTopbar();
 

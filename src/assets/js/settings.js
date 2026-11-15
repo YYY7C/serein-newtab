@@ -11,6 +11,7 @@ import { applyBackground, cycleBing, fetchBingGallery, saveLocalWallpaper } from
 import { applyConfig, dockWidth } from './theme.js';
 import { exportState, importState, resetAll, usageReport } from './data.js';
 import { refreshClock } from './clock.js';
+import { resolveIcon } from './icons.js';
 
 const SECTIONS = [
   { id: 'appearance', label: '外观', icon: 'palette' },
@@ -58,8 +59,6 @@ export function initSettings() {
     }
   });
 
-  bus.on('openSettings', (payload) => open(payload?.tab));
-  document.addEventListener('lumen:open-settings', () => open());
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape' || !isOpen) return;
     // 上层还有弹窗时交给弹窗自己处理
@@ -116,6 +115,9 @@ export function open(tab = 'appearance') {
   if (!root) initSettings();
   activeTab = tab || 'appearance';
   isOpen = true;
+  // 让页面本体退到后面：设置是「换个场景」而不是「在页面上盖一张纸」，
+  // 否则面板和快捷方式/小组件会看起来叠在一起。
+  document.documentElement.dataset.overlay = 'settings';
   root.classList.add('is-open');
   const scrim = root.querySelector('.scrim');
   scrim.classList.add('is-open');
@@ -125,6 +127,7 @@ export function open(tab = 'appearance') {
 export function close() {
   if (!root) return;
   isOpen = false;
+  delete document.documentElement.dataset.overlay;
   root.classList.remove('is-open');
   root.querySelector('.scrim')?.classList.remove('is-open');
 }
@@ -355,6 +358,24 @@ function buildAppearance() {
             touch();
           },
         })
+      )
+    ),
+    group(
+      '图标',
+      row(
+        '图标样式',
+        '内置矢量图标离线可用、任意尺寸清晰；网站图标取自 Chrome 本地缓存',
+        makeSegmented(
+          [
+            { value: 'brand', label: '品牌图标' },
+            { value: 'favicon', label: '网站图标' },
+          ],
+          config.layout.iconStyle || 'brand',
+          (value) => {
+            config.layout.iconStyle = value;
+            touch();
+          }
+        )
       )
     ),
     group(
@@ -831,6 +852,39 @@ function buildLayout() {
 
 /* ----------------------------------------------------------- 快捷方式 */
 
+/** 列表里的小图标：优先用内置品牌图标，和主面板保持一致 */
+function favNode(item) {
+  const descriptor = resolveIcon(item, { iconStyle: store.state.config.layout.iconStyle || 'brand' });
+  const node = h('span', {
+    class: `link-fav${descriptor.brand ? ' is-brand' : ''}`,
+    text: descriptor.brand ? '' : descriptor.text,
+  });
+  if (!descriptor.brand) {
+    node.style.background = `linear-gradient(145deg, ${descriptor.from}, ${descriptor.to})`;
+    if (descriptor.fg) node.style.color = descriptor.fg;
+  }
+  if (descriptor.src) {
+    const img = h('img', { src: descriptor.src, alt: '', loading: 'lazy', decoding: 'async' });
+    img.addEventListener(
+      'load',
+      () => {
+        if (!descriptor.brand) node.textContent = '';
+        node.appendChild(img);
+      },
+      { once: true }
+    );
+    img.addEventListener(
+      'error',
+      () => {
+        img.remove();
+        if (descriptor.brand) node.textContent = descriptor.text;
+      },
+      { once: true }
+    );
+  }
+  return node;
+}
+
 function buildShortcuts() {
   const config = store.state.config;
   const behavior = config.behavior;
@@ -847,7 +901,7 @@ function buildShortcuts() {
         h(
           'div',
           { class: 'link-row', style: { cursor: 'default' } },
-          h('span', { class: 'link-fav', text: item.title.slice(0, 1) }),
+          favNode(item),
           h('span', { class: 'name', text: item.title }),
           folder ? h('span', { class: 'suggest-hint', text: folder }) : null,
           h('button', {

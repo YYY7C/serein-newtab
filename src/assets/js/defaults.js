@@ -278,6 +278,7 @@ export function createDefaultState() {
         showWeather: true,
         showHint: true,
         verticalCenter: true,
+        iconStyle: 'brand',
       },
 
       search: {
@@ -387,6 +388,11 @@ export function migrate(raw) {
 
   merged.notes = typeof merged.notes === 'string' ? merged.notes : '';
   merged.weather = merged.weather && typeof merged.weather === 'object' ? merged.weather : defaults.weather;
+
+  // 图标来源只允许两个值，老数据/脏数据统一回落到内置品牌图标
+  if (!['brand', 'favicon'].includes(merged.config?.layout?.iconStyle)) {
+    merged.config.layout.iconStyle = 'brand';
+  }
 
   // 数字字段兜底
   const numeric = [

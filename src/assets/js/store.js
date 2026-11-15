@@ -132,6 +132,13 @@ export function removeShortcut(id) {
   return true;
 }
 
+/** 撤销删除：把原始对象放回去，order 保持不变，位置也就回来了 */
+export function restoreShortcut(item) {
+  if (!item || state.shortcuts.some((s) => s.id === item.id)) return;
+  state.shortcuts.push({ ...item });
+  commit('shortcuts');
+}
+
 export function moveShortcutToGroup(id, groupId) {
   const item = state.shortcuts.find((s) => s.id === id);
   if (!item) return false;
@@ -201,6 +208,26 @@ export function removeGroup(id, { keepItems = true } = {}) {
     state.shortcuts = state.shortcuts.filter((s) => s.groupId !== id);
   }
   commit('groups');
+}
+
+/** 撤销「删除文件夹」/「解散文件夹」
+ * reassign=true 时把仍在主面板的图标重新放回文件夹（解散场景）
+ */
+export function restoreGroup(group, items = [], { reassign = false } = {}) {
+  if (!group || state.groups.some((g) => g.id === group.id)) return;
+  state.groups.push({ ...group });
+  for (const item of items) {
+    const existing = state.shortcuts.find((s) => s.id === item.id);
+    if (existing) {
+      if (reassign) {
+        existing.groupId = group.id;
+        existing.order = item.order;
+      }
+    } else {
+      state.shortcuts.push({ ...item });
+    }
+  }
+  commit('shortcuts');
 }
 
 /* ------------------------------------------------------------------- 待办 */

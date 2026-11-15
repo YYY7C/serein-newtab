@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" aria-hidden="true">
+  <defs>
+    <linearGradient id="ig" x1="0" y1="24" x2="24" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFD776"/>
+      <stop offset=".28" stop-color="#F5A63C"/>
+      <stop offset=".52" stop-color="#E9526B"/>
+      <stop offset=".76" stop-color="#B93AB0"/>
+      <stop offset="1" stop-color="#5B54D6"/>
+    </linearGradient>
+  </defs>
+  <rect width="48" height="48" fill="#FFFFFF"/>
+  <g transform="translate(11 11) scale(1.08333)">
+    <rect width="24" height="24" rx="6.4" fill="url(#ig)"/>
+    <g fill="none" stroke="#FFFFFF" stroke-width="1.9">
+      <rect x="6.1" y="6.1" width="11.8" height="11.8" rx="3.6"/>
+      <circle cx="12" cy="12" r="3"/>
+    </g>
+    <circle cx="16.7" cy="7.3" r="1.1" fill="#FFFFFF"/>
+  </g>
+</svg>

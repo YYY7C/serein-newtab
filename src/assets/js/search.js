@@ -5,11 +5,11 @@
  * 这里的引擎只决定「本页提交后跳到哪个地址」。
  */
 
-import { $, h, clear, svgIcon, debounce, normalizeUrl } from './util.js';
+import { $, h, clear, svgIcon, debounce, normalizeUrl, bus, hostOf } from './util.js';
 import { ENGINES, engineById } from './defaults.js';
 import * as store from './store.js';
 import { openMenu } from './menu.js';
-import { resolveIcon } from './icons.js';
+import { resolveIcon, brandSlugFor, brandLogoUrl } from './icons.js';
 
 let els = null;
 let rows = [];
@@ -18,6 +18,67 @@ let abortController = null;
 let latestQuery = '';
 
 const IS_MAC = /mac|iphone|ipad/i.test(navigator.platform || navigator.userAgent);
+
+/* --------------------------------------------------------------- 命令 */
+
+/** 搜索结果里的「命令」组：把手边常用的动作直接变成一句话 */
+const COMMANDS = [
+  {
+    label: '添加快捷方式',
+    keywords: 'add shortcut 添加 新建 图标',
+    icon: 'plus',
+    run: () => import('./tiles.js').then((m) => m.addShortcut()),
+  },
+  {
+    label: '新建文件夹',
+    keywords: 'folder 文件夹 分组',
+    icon: 'folder-plus',
+    run: () => import('./tiles.js').then((m) => m.createFolder()),
+  },
+  {
+    label: '打开设置',
+    keywords: 'settings 设置 偏好',
+    icon: 'settings',
+    run: () => bus.emit('openSettings', {}),
+  },
+  {
+    label: '更换壁纸',
+    keywords: 'wallpaper 壁纸 背景 图',
+    icon: 'image',
+    run: () => bus.emit('openSettings', { tab: 'wallpaper' }),
+  },
+  {
+    label: '调整布局与列数',
+    keywords: 'layout 布局 列 图标大小 密度',
+    icon: 'grid',
+    run: () => bus.emit('openSettings', { tab: 'layout' }),
+  },
+  {
+    label: '切换视觉风格',
+    keywords: 'style theme 风格 主题 外观',
+    icon: 'palette',
+    run: () => bus.emit('openSettings', { tab: 'appearance' }),
+  },
+  {
+    label: '导入 / 导出数据',
+    keywords: 'data export import 备份 数据',
+    icon: 'database',
+    run: () => bus.emit('openSettings', { tab: 'data' }),
+  },
+  {
+    label: '查看快捷键与权限',
+    keywords: 'help 帮助 快捷键 about 关于',
+    icon: 'keyboard',
+    run: () => bus.emit('openSettings', { tab: 'about' }),
+  },
+];
+
+function matchCommands(query) {
+  const lower = query.toLowerCase();
+  return COMMANDS.filter(
+    (command) => command.label.toLowerCase().includes(lower) || command.keywords.includes(lower)
+  ).slice(0, 3);
+}
 
 /* --------------------------------------------------------------- 判定 */
 
@@ -96,11 +157,16 @@ function paintEngine() {
   if (!els) return;
   const engine = engineById(store.state.config.search.engine);
   clear(els.engineBtn);
+  const slug = brandSlugFor(hostOf(engine.url));
   const badge = h('span', {
-    class: `engine-badge${engine.letter.length > 2 ? ' is-compact' : ''}`,
-    text: engine.letter,
+    class: `engine-badge${engine.letter.length > 2 ? ' is-compact' : ''}${slug ? ' is-brand' : ''}`,
   });
-  badge.style.background = `linear-gradient(140deg, ${engine.color}, ${shade(engine.color, -0.22)})`;
+  if (slug) {
+    badge.appendChild(h('img', { src: brandLogoUrl(slug), alt: '', decoding: 'async' }));
+  } else {
+    badge.textContent = engine.letter;
+    badge.style.background = `linear-gradient(140deg, ${engine.color}, ${shade(engine.color, -0.22)})`;
+  }
   els.engineBtn.appendChild(badge);
   els.engineBtn.appendChild(h('span', { text: engine.name }));
   els.engineBtn.appendChild(h('span', { html: svgIcon('chevron-down', 13), style: { opacity: '.55' } }));
@@ -119,8 +185,8 @@ function paintHint() {
   const key = IS_MAC ? '⌘' : 'Ctrl';
   els.hint.innerHTML =
     `<span><kbd>${key}</kbd> + <kbd>K</kbd> 聚焦搜索</span>` +
-    `<span>右键图标可编辑</span>` +
-    `<span><kbd>Esc</kbd> 关闭</span>`;
+    `<span>输入「设置」「壁纸」直达命令</span>` +
+    `<span><kbd>?</kbd> 快捷键</span>`;
   els.hint.hidden = store.state.config.layout.showHint === false;
 }
 
@@ -274,7 +340,27 @@ function renderSuggestions(remote = []) {
     rows.push(row);
   }
 
-  // 2) 本地快捷方式
+  // 2) 命令
+  const commands = matchCommands(query);
+  if (commands.length) {
+    els.suggest.appendChild(h('div', { class: 'suggest-group-label', text: '命令' }));
+    for (const command of commands) {
+      const row = buildRow({
+        icon: command.icon,
+        text: command.label,
+        hint: '命令',
+        run: () => {
+          els.input.value = '';
+          closeSuggest();
+          command.run();
+        },
+      });
+      els.suggest.appendChild(row.el);
+      rows.push(row);
+    }
+  }
+
+  // 3) 本地快捷方式
   const lower = query.toLowerCase();
   const matches = store.state.shortcuts
     .filter((item) => !item.groupId)
@@ -282,19 +368,27 @@ function renderSuggestions(remote = []) {
     .slice(0, 4);
 
   if (matches.length) {
-    els.suggest.appendChild(h('div', { class: 'suggest-group-label', text: '快捷方式' }));
-    for (const item of matches) {
-      const descriptor = resolveIcon(item);
-      const thumb = h('span', { class: 'suggest-thumb', text: descriptor.emoji ? descriptor.text : descriptor.text });
-      thumb.style.background = `linear-gradient(145deg, ${descriptor.from}, ${descriptor.to})`;
+    els.suggest.appendChild(h('div', { class: 'suggest-group-label', text: '快捷方式' }));    for (const item of matches) {
+      const descriptor = resolveIcon(item, { iconStyle: store.state.config.layout.iconStyle || 'brand' });
+      const thumb = h('span', {
+        class: `suggest-thumb${descriptor.brand ? ' is-brand' : ''}`,
+        text: descriptor.brand ? '' : descriptor.text,
+      });
+      if (!descriptor.brand) thumb.style.background = `linear-gradient(145deg, ${descriptor.from}, ${descriptor.to})`;
       if (descriptor.src) {
-        const img = h('img', { src: descriptor.src, alt: '' });
-        img.addEventListener('load', () => {
-          thumb.textContent = '';
-          thumb.style.background = 'transparent';
-          thumb.appendChild(img);
-        });
-        img.addEventListener('error', () => img.remove());
+        const img = h('img', { src: descriptor.src, alt: '', loading: 'lazy', decoding: 'async' });
+        img.addEventListener(
+          'load',
+          () => {
+            if (!descriptor.brand) {
+              thumb.textContent = '';
+              thumb.style.background = 'transparent';
+            }
+            thumb.appendChild(img);
+          },
+          { once: true }
+        );
+        img.addEventListener('error', () => img.remove(), { once: true });
       }
       const row = buildRow({
         thumb,
@@ -426,6 +520,11 @@ function globalHotkeys(event) {
   if (event.key === '/' && !isTypingTarget(event.target)) {
     event.preventDefault();
     focusSearch();
+    return;
+  }
+  if (event.key === '?' && !isTypingTarget(event.target)) {
+    event.preventDefault();
+    bus.emit('openSettings', { tab: 'about' });
   }
 }
 

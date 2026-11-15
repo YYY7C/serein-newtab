@@ -10,10 +10,14 @@ import * as store from './store.js';
 import { resolveIcon } from './icons.js';
 import { files, trackObjectUrl } from './storage.js';
 import { openMenu } from './menu.js';
-import { shortcutEditor, confirmDialog, promptDialog, openModal } from './modals.js';
+
+/* 编辑弹窗按需加载：首屏只有网格，不需要这 20 KB */
+let modalsPromise = null;
+const modals = () => (modalsPromise ||= import('./modals.js'));
 
 let gridEl = null;
 let firstRender = true;
+let gridSignature = '';
 let dragPayload = null;
 const fileIconCache = new Map();
 
@@ -28,44 +32,62 @@ async function fileIconUrl(fileId) {
   return url;
 }
 
+const iconStyle = () => store.state.config.layout.iconStyle || 'brand';
+
+/** 字符徽标：品牌色渐变 + 字符 */
+function monoNode(descriptor) {
+  const mono = h('span', {
+    class: `tile-mono${descriptor.emoji ? ' is-emoji' : ''}`,
+    text: descriptor.text,
+  });
+  if (!descriptor.emoji) {
+    mono.style.setProperty('--c1', descriptor.from);
+    mono.style.setProperty('--c2', descriptor.to);
+    if (descriptor.fg) mono.style.color = descriptor.fg;
+  }
+  return mono;
+}
+
 /**
  * @param {object} item 快捷方式
- * @param {{mini?:boolean}} options mini 用于文件夹预览
  */
-function buildIcon(item, options = {}) {
-  const descriptor = resolveIcon(item);
+function buildIcon(item) {
+  const descriptor = resolveIcon(item, { iconStyle: iconStyle() });
   const box = h('div', { class: 'tile-icon' });
 
   if (descriptor.emoji) {
-    box.appendChild(
-      h('span', {
-        class: 'tile-mono is-emoji',
-        text: descriptor.text,
-      })
-    );
+    box.appendChild(monoNode(descriptor));
     box.style.background = 'var(--glass-bg)';
     return box;
   }
 
-  const mono = h('span', { class: 'tile-mono', text: descriptor.text });
-  mono.style.setProperty('--c1', descriptor.from);
-  mono.style.setProperty('--c2', descriptor.to);
-  if (descriptor.fg) mono.style.color = descriptor.fg;
-  box.appendChild(mono);
+  // 内置矢量品牌图标：本地文件，不会闪字符，也不依赖网络
+  if (descriptor.brand) {
+    box.classList.add('is-brand');
+    attachImage(box, descriptor.src, {
+      onError: () => {
+        box.classList.remove('is-brand');
+        box.appendChild(monoNode(descriptor));
+      },
+    });
+    return box;
+  }
+
+  box.appendChild(monoNode(descriptor));
 
   if (descriptor.pendingFileId) {
     fileIconUrl(descriptor.pendingFileId).then((url) => {
       if (!url || !box.isConnected) return;
-      attachImage(box, url, true);
+      attachImage(box, url, { cover: true });
     });
   } else if (descriptor.src) {
-    attachImage(box, descriptor.src, false);
+    attachImage(box, descriptor.src);
   }
 
   return box;
 }
 
-function attachImage(box, src, cover) {
+function attachImage(box, src, { cover = false, onError = null } = {}) {
   const img = h('img', {
     class: `tile-img${cover ? ' is-cover' : ''}`,
     src,
@@ -74,8 +96,15 @@ function attachImage(box, src, cover) {
     decoding: 'async',
     draggable: 'false',
   });
-  img.addEventListener('load', () => img.classList.add('is-loaded'));
-  img.addEventListener('error', () => img.remove());
+  img.addEventListener('load', () => img.classList.add('is-loaded'), { once: true });
+  img.addEventListener(
+    'error',
+    () => {
+      img.remove();
+      onError?.();
+    },
+    { once: true }
+  );
   box.appendChild(img);
 }
 
@@ -89,19 +118,35 @@ function buildFolderMini(groupId) {
       mini.appendChild(h('span', { class: 'empty' }));
       continue;
     }
-    const descriptor = resolveIcon(item);
-    const cell = h('span', { text: descriptor.emoji ? descriptor.text : descriptor.text });
-    cell.style.setProperty('--c1', descriptor.from);
-    cell.style.setProperty('--c2', descriptor.to);
+    const descriptor = resolveIcon(item, { iconStyle: iconStyle() });
+    const cell = h('span', { class: descriptor.brand ? 'is-brand' : '', text: descriptor.brand ? '' : descriptor.text });
+    if (!descriptor.brand) {
+      cell.style.setProperty('--c1', descriptor.from);
+      cell.style.setProperty('--c2', descriptor.to);
+    }
     if (descriptor.emoji) cell.style.background = 'var(--glass-bg)';
     if (descriptor.src) {
       const img = h('img', { src: descriptor.src, alt: '', loading: 'lazy', draggable: 'false' });
-      img.addEventListener('load', () => {
-        cell.textContent = '';
-        cell.style.background = 'transparent';
-        cell.appendChild(img);
-      });
-      img.addEventListener('error', () => img.remove());
+      img.addEventListener(
+        'load',
+        () => {
+          if (!descriptor.brand) {
+            cell.textContent = '';
+            cell.style.background = 'transparent';
+          }
+          cell.appendChild(img);
+        },
+        { once: true }
+      );
+      img.addEventListener(
+        'error',
+        () => {
+          img.remove();
+          cell.classList.remove('is-brand');
+          if (descriptor.brand) cell.textContent = descriptor.text;
+        },
+        { once: true }
+      );
     }
     mini.appendChild(cell);
   }
@@ -245,9 +290,35 @@ export function initTiles() {
 
 export function renderGrid() {
   if (!gridEl) return;
-  clear(gridEl);
 
   const items = store.rootItems();
+  // 只有「影响磁贴外观」的数据变化才重绘。
+  // 拖动设置里的滑块会高频 commit('config')，这里挡掉绝大多数无意义的重建。
+  const signature = [
+    store.state.config.layout.iconStyle || 'brand',
+    items.map((entry) => `${entry.kind}:${entry.id}:${entry.order}`).join(','),
+    store.state.shortcuts.map((s) => `${s.id}:${s.groupId || ''}:${s.order}:${s.title}:${s.url}`).join(','),
+    store.state.groups.map((g) => `${g.id}:${g.title}`).join(','),
+  ].join('|');
+  if (signature === gridSignature && gridEl.childElementCount) return;
+  gridSignature = signature;
+
+  clear(gridEl);
+
+  if (!items.length) {
+    gridEl.appendChild(
+      h(
+        'div',
+        { class: 'grid-empty' },
+        h('div', { class: 'grid-empty-title', text: '从一个图标开始' }),
+        h('div', {
+          class: 'grid-empty-text',
+          text: '点下面的「+」添加第一个网站；右键空白处也能新建文件夹或更换壁纸。',
+        })
+      )
+    );
+  }
+
   items.forEach((entry, index) => {
     gridEl.appendChild(
       entry.kind === 'group' ? buildFolderTile(entry.item, index) : buildShortcutTile(entry.item, index)
@@ -279,6 +350,7 @@ function openShortcut(url) {
 /* --------------------------------------------------------------- 操作 */
 
 export async function addShortcut(groupId = null) {
+  const { shortcutEditor } = await modals();
   const result = await shortcutEditor({
     groups: store.state.groups,
     defaultGroupId: groupId,
@@ -288,6 +360,7 @@ export async function addShortcut(groupId = null) {
 }
 
 async function editShortcut(item) {
+  const { shortcutEditor } = await modals();
   const result = await shortcutEditor({
     shortcut: item,
     groups: store.state.groups,
@@ -298,19 +371,25 @@ async function editShortcut(item) {
 
 async function deleteShortcut(item) {
   if (store.state.config.behavior.confirmDelete) {
+    const { confirmDialog } = await modals();
     const ok = await confirmDialog({
       title: '删除快捷方式',
-      message: `确定要删除「${item.title}」吗？此操作不可撤销。`,
+      message: `确定要删除「${item.title}」吗？删除后 6 秒内可以撤销。`,
       confirmText: '删除',
       danger: true,
     });
     if (!ok) return;
   }
+  const snapshot = { ...item };
   store.removeShortcut(item.id);
-  bus.emit('toast', { text: `已删除「${item.title}」` });
+  bus.emit('toast', {
+    text: `已删除「${item.title}」`,
+    action: { label: '撤销', onClick: () => store.restoreShortcut(snapshot) },
+  });
 }
 
 export async function createFolder(itemId = null) {
+  const { promptDialog } = await modals();
   const title = await promptDialog({
     title: '新建文件夹',
     label: '文件夹名称',
@@ -324,6 +403,7 @@ export async function createFolder(itemId = null) {
 }
 
 async function renameFolder(group) {
+  const { promptDialog } = await modals();
   const title = await promptDialog({
     title: '重命名文件夹',
     label: '文件夹名称',
@@ -394,8 +474,13 @@ function openFolderMenu(group, event) {
         label: '解散（图标移出）',
         icon: 'folder',
         onClick: () => {
+          const snapshot = { ...group };
+          const nested = store.groupItems(group.id).map((item) => ({ ...item }));
           store.removeGroup(group.id, { keepItems: true });
-          bus.emit('toast', { text: '文件夹已解散，图标已移回主面板' });
+          bus.emit('toast', {
+            text: '文件夹已解散，图标已移回主面板',
+            action: { label: '撤销', onClick: () => store.restoreGroup(snapshot, nested, { reassign: true }) },
+          });
         },
       },
       {
@@ -403,13 +488,21 @@ function openFolderMenu(group, event) {
         icon: 'trash',
         danger: true,
         onClick: async () => {
+          const { confirmDialog } = await modals();
+          const items = store.groupItems(group.id).map((item) => ({ ...item }));
           const ok = await confirmDialog({
             title: '删除文件夹',
-            message: `「${group.title}」及其中的 ${store.groupItems(group.id).length} 个图标都会被删除，确定吗？`,
+            message: `「${group.title}」及其中的 ${items.length} 个图标都会被删除，删除后 6 秒内可以撤销。`,
             confirmText: '删除',
             danger: true,
           });
-          if (ok) store.removeGroup(group.id, { keepItems: false });
+          if (!ok) return;
+          const snapshot = { ...group };
+          store.removeGroup(group.id, { keepItems: false });
+          bus.emit('toast', {
+            text: `已删除「${group.title}」`,
+            action: { label: '撤销', onClick: () => store.restoreGroup(snapshot, items) },
+          });
         },
       },
     ],
@@ -433,10 +526,11 @@ function openCanvasMenu(event) {
 
 /* --------------------------------------------------------------- 文件夹 */
 
-export function openFolder(groupId) {
+async function openFolder(groupId) {
   const group = store.state.groups.find((g) => g.id === groupId);
   if (!group) return;
 
+  const { openModal, shortcutEditor, promptDialog } = await modals();
   const grid = h('div', { class: 'folder-grid' });
   let modal = null;
 

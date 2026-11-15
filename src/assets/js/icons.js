@@ -2,13 +2,15 @@
  *
  * 解析顺序（每一级失败自动降级）：
  *   1. 用户自定义（emoji / 文字 / 图片 URL / 本地上传）
- *   2. chrome 内置 favicon 服务  chrome-extension://<id>/_favicon/?pageUrl=…
- *   3. 品牌色字符徽标（同一域名永远同一配色，视觉稳定）
+ *   2. 内置矢量品牌图标（assets/brand/*.svg，离线、任意尺寸清晰）
+ *   3. chrome 内置 favicon 服务  chrome-extension://<id>/_favicon/?pageUrl=…
+ *   4. 品牌色字符徽标（同一域名永远同一配色，视觉稳定）
  *
  * 徽标不是妥协——它是「图片加载失败/离线」时的确定性美学保底。
  */
 
 import { domainPalette, hostOf, normalizeUrl, hashString, hexToRgb } from './util.js';
+import { brandLogoUrl, brandSlugFor } from './brands.js';
 
 /* ------------------------------------------------------------ 品牌配色 */
 
@@ -196,7 +198,7 @@ export const faviconSupported = (() => {
 
 const faviconCache = new Map();
 
-export function faviconUrl(url, size = 64) {
+export function faviconUrl(url, size = 128) {
   if (!faviconSupported) return '';
   const target = normalizeUrl(url);
   if (!target) return '';
@@ -215,9 +217,13 @@ export function faviconUrl(url, size = 64) {
 /* ---------------------------------------------------------------- 解析 */
 
 /**
- * @returns {{src: string|null, text: string, from: string, to: string, fg: string, emoji: boolean}}
+ * @param {object} shortcut
+ * @param {{useFavicon?: boolean, iconStyle?: 'brand'|'favicon'}} options
+ *   iconStyle='brand' 时优先使用内置矢量品牌图标
+ * @returns {{src: string|null, text: string, from: string, to: string, fg: string,
+ *            emoji: boolean, brand: boolean}}
  */
-export function resolveIcon(shortcut, { useFavicon = true } = {}) {
+export function resolveIcon(shortcut, { useFavicon = true, iconStyle = 'brand' } = {}) {
   const title = shortcut?.title || '';
   const url = shortcut?.url || '';
   const host = hostOf(url);
@@ -235,16 +241,22 @@ export function resolveIcon(shortcut, { useFavicon = true } = {}) {
     to: shade(baseColor, -0.18),
     fg: readableOn(baseColor),
     emoji: false,
+    brand: false,
   };
 
   if (type === 'emoji' && value) return { ...fallback, text: value, from: 'transparent', to: 'transparent', fg: '', emoji: true };
   if (type === 'text' && value) return { ...fallback, text: value.slice(0, 4) };
   if (type === 'url' && value) return { ...fallback, src: value };
   if (type === 'file' && value) return { ...fallback, src: null, pendingFileId: value };
-  if (type === 'favicon') return { ...fallback, src: useFavicon ? faviconUrl(url, 64) : null };
-  if (type === 'auto') return { ...fallback, src: useFavicon ? faviconUrl(url, 64) : null };
+  if (type === 'favicon') return { ...fallback, src: useFavicon ? faviconUrl(url) : null };
 
-  return fallback;
+  // auto：先试内置品牌图标
+  if (useFavicon && iconStyle !== 'favicon') {
+    const slug = brandSlugFor(host);
+    if (slug) return { ...fallback, src: brandLogoUrl(slug), brand: true };
+  }
+
+  return { ...fallback, src: useFavicon ? faviconUrl(url) : null };
 }
 
 /** 上传图标走 IndexedDB，需要异步取 Blob 再转成 objectURL */
@@ -257,8 +269,10 @@ export async function loadFileIcon(fileId) {
 
 /** 给缩略图预览用：返回一个稳定的小尺寸 favicon 地址 */
 export function previewFavicon(url) {
-  return faviconUrl(url, 32);
+  return faviconUrl(url, 64);
 }
+
+export { brandSlugFor, brandLogoUrl };
 
 export function brandColorFor(url, title) {
   const host = hostOf(url);

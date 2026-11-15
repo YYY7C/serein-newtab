@@ -82,6 +82,7 @@ html[data-tone='light'] .bg-vignette {
   height: 100vh;
   height: 100dvh;
   width: 100%;
+  transition: opacity 0.28s var(--ease), filter 0.28s var(--ease);
 }
 
 .main {
@@ -451,6 +452,20 @@ html[data-tone='light'] .clock {
   font-size: 9px;
 }
 
+/* 有内置品牌图标的引擎直接显示 logo，比字母更好认 */
+.engine-badge.is-brand {
+  background: #f7f8fa;
+  box-shadow: inset 0 0 0 1px rgba(17, 19, 26, 0.08);
+  overflow: hidden;
+}
+
+.engine-badge.is-brand img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
+
 .search-input {
   flex: 1 1 auto;
   min-width: 0;
@@ -566,6 +581,15 @@ html[data-tone='light'] .clock {
   width: 100%;
   height: 100%;
   object-fit: contain;
+}
+
+.suggest-thumb.is-brand {
+  background: #f7f8fa;
+  box-shadow: inset 0 0 0 1px rgba(17, 19, 26, 0.08);
+}
+
+.suggest-thumb.is-brand img {
+  object-fit: cover;
 }
 
 .suggest-text {
@@ -763,6 +787,41 @@ html[data-tone='light'] .clock {
   padding: 0;
 }
 
+/* ---- 内置品牌图标 ----
+ * 图形文件本身就是「白底方块 + 官方色字形」，所以底色、圆角、
+ * 描边全部交给容器：容器负责裁切与阴影，图片只负责内容。
+ */
+
+.tile-icon.is-brand {
+  background: #f7f8fa;
+  border-color: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.2), 0 1px 2px rgba(0, 0, 0, 0.14);
+}
+
+.tile-icon.is-brand::after {
+  /* 常驻一层极细内描边：浅色壁纸上白块不会糊成一片 */
+  opacity: 1;
+  box-shadow: inset 0 0 0 1px rgba(17, 19, 26, 0.09);
+  transition: box-shadow 0.2s var(--ease);
+}
+
+.tile:hover .tile-icon.is-brand::after {
+  box-shadow: inset 0 0 0 1px rgba(17, 19, 26, 0.06),
+    inset 0 0 0 2px color-mix(in srgb, var(--accent) 46%, transparent);
+}
+
+.tile-icon.is-brand .tile-img {
+  padding: 0;
+  object-fit: cover;
+  border-radius: inherit;
+}
+
+.tile:hover .tile-icon.is-brand {
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.32), 0 2px 4px rgba(0, 0, 0, 0.18);
+}
+
 .tile-label {
   max-width: calc(var(--icon-size) + 24px);
   font-size: 12px;
@@ -800,6 +859,31 @@ html[data-tone='light'] .clock {
 
 .tile--add .tile-label {
   color: var(--fg-3);
+}
+
+/* 空状态：还没有任何快捷方式时的一句引导 */
+.grid-empty {
+  flex: 1 0 100%;
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  padding: 14px 0 4px;
+  text-align: center;
+}
+
+.grid-empty-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--fg);
+  text-shadow: var(--text-shadow);
+}
+
+.grid-empty-text {
+  max-width: 34ch;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--fg-3);
+  text-shadow: var(--text-shadow);
 }
 
 /* 文件夹磁贴 */
@@ -843,6 +927,17 @@ html[data-tone='light'] .clock {
 .folder-mini .empty {
   background: var(--glass-bg);
   border: 1px solid var(--glass-border);
+}
+
+.folder-mini > span.is-brand {
+  background: #f7f8fa;
+  border-radius: 28%;
+}
+
+.folder-mini > span.is-brand img {
+  padding: 0;
+  object-fit: cover;
+  border-radius: 28%;
 }
 
 .folder-badge {
@@ -1363,6 +1458,16 @@ html[data-tone='light'] .clock {
   width: 100%;
   height: 100%;
   object-fit: contain;
+}
+
+.link-fav.is-brand {
+  background: #f7f8fa;
+  box-shadow: inset 0 0 0 1px rgba(17, 19, 26, 0.08);
+}
+
+.link-fav.is-brand img {
+  object-fit: cover;
+  border-radius: inherit;
 }
 
 .link-row span.name {

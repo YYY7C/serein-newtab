@@ -187,6 +187,20 @@ html[data-style='noir'] .tile:hover .tile-img {
   filter: none;
 }
 
+/* 内置品牌图标保留品牌色，只压一点亮度融进暗色材质 */
+html[data-style='noir'] .tile-icon.is-brand {
+  background: #f4f5f7;
+  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.42);
+}
+
+html[data-style='noir'] .tile-icon.is-brand .tile-img {
+  filter: saturate(0.92) brightness(0.95);
+}
+
+html[data-style='noir'] .tile:hover .tile-icon.is-brand .tile-img {
+  filter: none;
+}
+
 html[data-style='noir'] .tile-label {
   font-size: 11.5px;
   color: var(--fg-3);
@@ -576,6 +590,26 @@ html[data-style='editorial'] .tile-img {
 }
 
 html[data-style='editorial'] .tile:hover .tile-img {
+  filter: none;
+  opacity: 1;
+}
+
+/* 品牌图标在这个排版风格里缩成 18px 的小色块，保留识别度 */
+html[data-style='editorial'] .tile-icon.is-brand {
+  width: 18px;
+  height: 18px;
+  border-radius: 2px;
+  background: #fff;
+  box-shadow: none;
+}
+
+html[data-style='editorial'] .tile-icon.is-brand .tile-img {
+  padding: 0;
+  filter: grayscale(0.35) contrast(1.06);
+  opacity: 0.86;
+}
+
+html[data-style='editorial'] .tile:hover .tile-icon.is-brand .tile-img {
   filter: none;
   opacity: 1;
 }
@@ -1115,6 +1149,19 @@ html[data-style='terminal'] .tile-icon {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
   box-shadow: none;
+}
+
+html[data-style='terminal'] .tile-icon.is-brand {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  background: #0b0d0c;
+  box-shadow: none;
+}
+
+html[data-style='terminal'] .tile-icon.is-brand .tile-img {
+  padding: 0;
+  filter: saturate(1.05);
 }
 
 html[data-style='terminal'] .tile:hover .tile-icon {
