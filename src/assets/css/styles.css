@@ -1,0 +1,1522 @@
+@charset "UTF-8";
+/* ============================================================================
+   Lumen · 视觉风格覆盖层
+   ----------------------------------------------------------------------------
+   html[data-style="glass"] 使用 base CSS，不在此覆盖。
+   其余三套是完整的表层语言替换：色彩体系、表面材质、版面网格、图标呈现方式。
+   ========================================================================== */
+
+/* ==========================================================================
+   1. noir —— 暗色材质
+   去掉渐变光晕与毛玻璃，改为「固态表面 + 上打光 + 1px 亮线」。
+   图标底色从高饱和压成深色调，色彩只在 hover 时回归。
+   ========================================================================== */
+
+html[data-style='noir'] {
+  --surface-0: #0b0c0e;
+  --surface-1: #121417;
+  --surface-2: #17191d;
+  --hair: rgba(255, 255, 255, 0.07);
+  --hair-strong: rgba(255, 255, 255, 0.12);
+
+  --fg: #f5f6f8;
+  --fg-1: rgba(245, 246, 248, 0.92);
+  --fg-2: rgba(245, 246, 248, 0.56);
+  --fg-3: rgba(245, 246, 248, 0.34);
+  --fg-4: rgba(245, 246, 248, 0.14);
+
+  --glass-bg: var(--surface-1);
+  --glass-bg-hover: var(--surface-2);
+  --glass-border: var(--hair);
+  --glass-border-strong: var(--hair-strong);
+  --glass-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 1px 2px rgba(0, 0, 0, 0.5);
+
+  --panel-bg: #14161a;
+  --panel-bg-solid: #121417;
+  --panel-border: var(--hair);
+  --panel-shadow: 0 30px 80px rgba(0, 0, 0, 0.66), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+
+  --menu-bg: #15181c;
+  --menu-hover: rgba(255, 255, 255, 0.06);
+
+  --divider: var(--hair);
+  --input-bg: rgba(255, 255, 255, 0.04);
+  --input-border: rgba(255, 255, 255, 0.09);
+  --text-shadow: none;
+  --scrim: rgba(6, 7, 9, 0.62);
+  --veil-rgb: 11, 12, 14;
+}
+
+html[data-style='noir'] .bg {
+  filter: grayscale(0.9) contrast(1.04);
+}
+
+/* ---- 材质：噪点颗粒 ---- */
+
+html[data-style='noir'] .bg::after,
+html[data-style='editorial'] .bg::after,
+html[data-style='terminal'] .bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url('../img/noise.png');
+  background-repeat: repeat;
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+/* ---- 统一表面 ---- */
+
+html[data-style='noir'] .card,
+html[data-style='noir'] .search,
+html[data-style='noir'] .icon-btn.glass {
+  background: var(--surface-1);
+  border: 1px solid var(--hair);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 1px 2px rgba(0, 0, 0, 0.45);
+}
+
+html[data-style='noir'] .card:hover,
+html[data-style='noir'] .search:hover {
+  background: var(--surface-2);
+}
+
+html[data-style='noir'] .search {
+  height: 54px;
+  border-radius: 13px;
+}
+
+html[data-style='noir'] .search.is-focused {
+  background: var(--surface-2);
+  border-color: var(--hair-strong);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+  transform: none;
+}
+
+html[data-style='noir'] .engine-btn,
+html[data-style='noir'] .search-submit {
+  border-radius: 9px;
+}
+
+html[data-style='noir'] .brand::before {
+  opacity: 0.42;
+}
+
+html[data-style='noir'] .brand-word {
+  font-weight: 300;
+  letter-spacing: 0.32em;
+  background: none;
+  -webkit-text-fill-color: currentColor;
+  color: rgba(255, 255, 255, 0.94);
+  filter: none;
+}
+
+html[data-style='noir'] .icon-btn.glass {
+  border-radius: 9px;
+}
+
+html[data-style='noir'] .icon-btn.glass.is-active {
+  background: color-mix(in srgb, var(--accent) 22%, var(--surface-1));
+  border-color: color-mix(in srgb, var(--accent) 34%, transparent);
+}
+
+/* ---- 图标：暗底彩色方块，hover 提亮 ---- */
+
+html[data-style='noir'] .tile-icon {
+  background: var(--surface-1);
+  border: 1px solid var(--hair);
+  border-radius: 13px;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+}
+
+html[data-style='noir'] .tile:hover .tile-icon {
+  background: var(--surface-2);
+  border-color: var(--hair-strong);
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.5);
+  transform: translateY(-2px) scale(1.02);
+}
+
+html[data-style='noir'] .tile-icon::after {
+  display: none;
+}
+
+html[data-style='noir'] .tile-mono {
+  /* 暗色材质：品牌色压低明度，靠一层顶部高光把字标烘起来 */
+  background: radial-gradient(
+      124% 112% at 26% -8%,
+      rgba(255, 255, 255, 0.15) 0%,
+      rgba(255, 255, 255, 0) 60%
+    ),
+    linear-gradient(
+      157deg,
+      color-mix(in srgb, var(--c1) 52%, #0f1115) 0%,
+      color-mix(in srgb, var(--c1) 35%, #0f1115) 58%,
+      color-mix(in srgb, var(--c1) 23%, #0f1115) 100%
+    );
+  color: #fff;
+  font-weight: 600;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.11), inset 0 -1px 0 rgba(0, 0, 0, 0.4);
+  transition: background 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+
+html[data-style='noir'] .tile:hover .tile-mono {
+  background: radial-gradient(
+      124% 112% at 26% -8%,
+      rgba(255, 255, 255, 0.22) 0%,
+      rgba(255, 255, 255, 0) 60%
+    ),
+    linear-gradient(
+      157deg,
+      color-mix(in srgb, var(--c1) 64%, #0f1115) 0%,
+      color-mix(in srgb, var(--c1) 46%, #0f1115) 58%,
+      color-mix(in srgb, var(--c1) 31%, #0f1115) 100%
+    );
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), inset 0 -1px 0 rgba(0, 0, 0, 0.4);
+}
+
+html[data-style='noir'] .tile-img {
+  filter: grayscale(0.92) contrast(1.02);
+  transition: filter 0.24s var(--ease), opacity 0.32s var(--ease);
+}
+
+html[data-style='noir'] .tile:hover .tile-img {
+  filter: none;
+}
+
+html[data-style='noir'] .tile-label {
+  font-size: 11.5px;
+  color: var(--fg-3);
+}
+
+html[data-style='noir'] .folder-mini > span {
+  background: color-mix(in srgb, var(--c1) 34%, #101216);
+  border-radius: 27%;
+  color: #fff;
+}
+
+html[data-style='noir'] .folder-badge {
+  background: var(--surface-2);
+  border: 1px solid var(--hair-strong);
+  color: var(--fg-1);
+  box-shadow: none;
+}
+
+/* ---- 排版：更克制 ---- */
+
+html[data-style='noir'] .clock {
+  font-weight: 200;
+  letter-spacing: -0.045em;
+}
+
+html[data-style='noir'] .clock-time {
+  font-size: clamp(58px, 8.6vw, 118px);
+}
+
+html[data-style='noir'] .greeting {
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  color: var(--fg-3);
+}
+
+html[data-style='noir'] .dateline {
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  color: var(--fg-3);
+}
+
+html[data-style='noir'] .festival {
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--accent) 88%, black 12%);
+  box-shadow: none;
+  height: 20px;
+  font-size: 10.5px;
+}
+
+html[data-style='noir'] .card-action,
+html[data-style='noir'] .todo-check {
+  border-radius: 5px;
+}
+
+html[data-style='noir'] .nav-item.is-active {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--fg-1);
+}
+
+/* ==========================================================================
+   2. editorial —— 编辑排版
+   纸色底、衬线数字、单栏目录。一切靠字号与网格说话，没有一处模糊与渐变。
+   ========================================================================== */
+
+html[data-style='editorial'] {
+  --paper: #f2eee6;
+  --paper-raised: #f8f5ef;
+  --ink: #191713;
+  --rule: rgba(25, 23, 19, 0.16);
+  --rule-soft: rgba(25, 23, 19, 0.075);
+
+  --font-display: 'Songti SC', 'Noto Serif SC', 'Source Han Serif SC', 'Source Han Serif CN', STSong,
+    Georgia, 'Times New Roman', serif;
+  --font-meta: ui-monospace, 'SF Mono', 'JetBrains Mono', 'Cascadia Mono', Consolas, monospace;
+
+  --fg: var(--ink);
+  --fg-1: rgba(25, 23, 19, 0.92);
+  --fg-2: rgba(25, 23, 19, 0.6);
+  --fg-3: rgba(25, 23, 19, 0.42);
+  --fg-4: rgba(25, 23, 19, 0.15);
+
+  --glass-bg: transparent;
+  --glass-bg-hover: rgba(25, 23, 19, 0.04);
+  --glass-border: var(--rule-soft);
+  --glass-border-strong: var(--rule);
+  --glass-shadow: none;
+
+  --panel-bg: var(--paper-raised);
+  --panel-bg-solid: var(--paper-raised);
+  --panel-border: var(--rule-soft);
+  --panel-shadow: 0 30px 80px rgba(45, 38, 22, 0.16);
+
+  --menu-bg: var(--paper-raised);
+  --menu-hover: rgba(25, 23, 19, 0.05);
+
+  --divider: var(--rule-soft);
+  --input-bg: rgba(25, 23, 19, 0.03);
+  --input-border: var(--rule);
+  --text-shadow: none;
+  --scrim: rgba(30, 26, 18, 0.3);
+  --veil-rgb: 242, 238, 230;
+}
+
+/* ---- 版面：左对齐单栏 ---- */
+
+html[data-style='editorial'] .bg {
+  background: var(--paper);
+}
+
+html[data-style='editorial'] .bg-media,
+html[data-style='editorial'] .bg-veil,
+html[data-style='editorial'] .bg-vignette {
+  display: none;
+}
+
+html[data-style='editorial'] .content {
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 28px;
+  padding: clamp(68px, 10vh, 108px) clamp(26px, 6vw, 88px) 48px;
+}
+
+html[data-style='editorial'] .hero {
+  align-items: flex-start;
+  text-align: left;
+  gap: 7px;
+}
+
+html[data-style='editorial'] .greeting {
+  order: -1;
+  font-family: var(--font-meta);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.24em;
+  color: var(--fg-2);
+  margin-bottom: 10px;
+}
+
+html[data-style='editorial'] .greeting .ico {
+  display: none;
+}
+
+html[data-style='editorial'] .clock {
+  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: -0.012em;
+  line-height: 1;
+  gap: 4px;
+}
+
+html[data-style='editorial'] .clock-time {
+  font-size: clamp(44px, 5vw, 66px);
+}
+
+html[data-style='editorial'] .clock-seconds {
+  font-size: 15px;
+  transform: translateY(0.2em);
+}
+
+html[data-style='editorial'] .dateline {
+  font-family: var(--font-meta);
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  justify-content: flex-start;
+  color: var(--fg-3);
+  gap: 7px;
+}
+
+html[data-style='editorial'] .festival {
+  height: auto;
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--accent);
+  font-family: var(--font-meta);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+}
+
+html[data-style='editorial'] .festival::before {
+  content: '\2014 ';
+}
+
+/* ---- 搜索：一条下划线 ---- */
+
+html[data-style='editorial'] .search-wrap {
+  width: var(--search-w, min(560px, 100%));
+}
+
+html[data-style='editorial'] .search {
+  height: 44px;
+  padding: 0;
+  gap: 12px;
+  border: none;
+  border-bottom: 1px solid var(--rule);
+  border-radius: 0;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+}
+
+html[data-style='editorial'] .search:hover {
+  background: transparent;
+  border-bottom-color: var(--fg-2);
+}
+
+html[data-style='editorial'] .search.is-focused {
+  background: transparent;
+  border-bottom-color: var(--ink);
+  box-shadow: none;
+  transform: none;
+}
+
+html[data-style='editorial'] .engine-btn {
+  height: 34px;
+  padding: 0 8px 0 0;
+  border-radius: 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+html[data-style='editorial'] .engine-btn:hover {
+  background: none;
+  color: var(--accent);
+}
+
+html[data-style='editorial'] .engine-badge {
+  width: 17px;
+  height: 17px;
+  border-radius: 2px;
+  font-size: 9px;
+  box-shadow: none;
+}
+
+html[data-style='editorial'] .search-input {
+  font-size: 14px;
+}
+
+html[data-style='editorial'] .search-submit {
+  display: none;
+}
+
+html[data-style='editorial'] .search-hint {
+  justify-content: flex-start;
+  opacity: 1;
+  margin-top: 11px;
+  font-family: var(--font-meta);
+  font-size: 10.5px;
+}
+
+html[data-style='editorial'] .search-hint kbd {
+  background: none;
+  border: none;
+  padding: 0 2px;
+  font-size: 10px;
+  color: var(--fg-2);
+}
+
+html[data-style='editorial'] .suggest {
+  border-radius: 2px;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  box-shadow: 0 24px 60px rgba(45, 38, 22, 0.14);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html[data-style='editorial'] .suggest-item,
+html[data-style='editorial'] .suggest-group-label {
+  border-radius: 2px;
+}
+
+html[data-style='editorial'] .suggest-group-label {
+  font-family: var(--font-meta);
+  letter-spacing: 0.2em;
+}
+
+/* ---- 目录：编号 + 名称 + 域名 ---- */
+
+html[data-style='editorial'] .dock {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+html[data-style='editorial'] .grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: min(var(--list-w), 100%);
+  max-width: 100%;
+  border-top: 1px solid var(--rule);
+  counter-reset: lm-tile;
+}
+
+html[data-style='editorial'] .grid--enter .tile {
+  animation: none;
+}
+
+html[data-style='editorial'] .tile {
+  flex: 0 0 auto;
+  width: 100%;
+  flex-direction: row;
+  align-items: center;
+  gap: 13px;
+  padding: 9.5px 4px;
+  border-radius: 0;
+  border-bottom: 1px solid var(--rule-soft);
+  counter-increment: lm-tile;
+  transition: background 0.16s var(--ease), padding-left 0.16s var(--ease);
+}
+
+html[data-style='editorial'] .tile::before {
+  content: counter(lm-tile, decimal-leading-zero);
+  flex: none;
+  width: 26px;
+  font-family: var(--font-meta);
+  font-size: 10px;
+  color: var(--fg-4);
+  transition: color 0.16s var(--ease);
+}
+
+html[data-style='editorial'] .tile::after {
+  content: attr(data-host);
+  margin-left: auto;
+  padding-left: 18px;
+  flex: none;
+  max-width: 42%;
+  font-family: var(--font-meta);
+  font-size: 10.5px;
+  color: rgba(25, 23, 19, 0.3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+html[data-style='editorial'] .tile:hover {
+  background: rgba(25, 23, 19, 0.035);
+  padding-left: 12px;
+}
+
+html[data-style='editorial'] .tile:hover::before {
+  color: var(--accent);
+}
+
+html[data-style='editorial'] .tile:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -4px;
+}
+
+html[data-style='editorial'] .tile-icon {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  border-radius: 2px;
+  border: none;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+}
+
+html[data-style='editorial'] .tile:hover .tile-icon {
+  transform: none;
+  box-shadow: none;
+}
+
+html[data-style='editorial'] .tile-icon::after {
+  display: none;
+}
+
+html[data-style='editorial'] .tile-mono {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0;
+  border-radius: 2px;
+  box-shadow: none;
+  color: transparent;
+}
+
+html[data-style='editorial'] .tile-img {
+  padding: 0;
+  filter: grayscale(1) contrast(1.15);
+  opacity: 0.72;
+}
+
+html[data-style='editorial'] .tile:hover .tile-img {
+  filter: none;
+  opacity: 1;
+}
+
+html[data-style='editorial'] .tile-label {
+  display: block;
+  min-width: 0;
+  max-width: none;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: 0;
+  color: var(--fg-1);
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  -webkit-line-clamp: unset;
+}
+
+html[data-style='editorial'] .folder-mini {
+  width: 18px;
+  height: 18px;
+  gap: 1px;
+}
+
+html[data-style='editorial'] .folder-mini > span {
+  border-radius: 1px;
+  font-size: 0;
+  color: transparent;
+}
+
+html[data-style='editorial'] .folder-badge {
+  display: none;
+}
+
+html[data-style='editorial'] .tile--add {
+  counter-increment: none;
+}
+
+html[data-style='editorial'] .tile--add::before {
+  content: '+';
+  font-size: 13px;
+  color: var(--fg-3);
+}
+
+html[data-style='editorial'] .tile--add::after {
+  content: '';
+}
+
+html[data-style='editorial'] .tile--add .tile-icon {
+  display: none;
+}
+
+html[data-style='editorial'] .tile--add .tile-label {
+  font-size: 13px;
+  color: var(--fg-3);
+}
+
+/* ---- 侧栏：去卡片，只留细线 ---- */
+
+html[data-style='editorial'] .sidebar {
+  padding-top: clamp(68px, 10vh, 108px);
+  padding-right: clamp(20px, 2.6vw, 44px);
+  gap: 26px;
+}
+
+html[data-style='editorial'] .card {
+  background: transparent;
+  border: none;
+  border-top: 1px solid var(--rule);
+  border-radius: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  padding: 14px 0 0;
+}
+
+html[data-style='editorial'] .card:hover {
+  background: transparent;
+}
+
+html[data-style='editorial'] .card-title {
+  font-family: var(--font-meta);
+  font-size: 9.5px;
+  letter-spacing: 0.22em;
+  color: var(--fg-3);
+}
+
+html[data-style='editorial'] .card-title .count {
+  background: none;
+  border: 1px solid var(--rule);
+  font-size: 9px;
+  padding: 0 5px;
+}
+
+html[data-style='editorial'] .weather-temp {
+  font-family: var(--font-display);
+  font-weight: 400;
+}
+
+html[data-style='editorial'] .forecast {
+  border-top-color: var(--rule-soft);
+}
+
+html[data-style='editorial'] .todo-add {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--rule-soft);
+  border-radius: 0;
+  padding-left: 0;
+}
+
+html[data-style='editorial'] .todo-item:hover {
+  background: rgba(25, 23, 19, 0.03);
+  border-radius: 2px;
+}
+
+html[data-style='editorial'] .notes-area {
+  font-family: var(--font-display);
+  font-size: 13.5px;
+  line-height: 1.8;
+  min-height: 64px;
+}
+
+/* ---- 顶栏 ---- */
+
+/* 编辑排版：衬线字标，字距收紧，像杂志刊头 */
+html[data-style='editorial'] .brand::before {
+  inset: -22px -26px;
+  opacity: 0.22;
+}
+
+html[data-style='editorial'] .brand-word {
+  font-family: var(--font-display, Georgia, 'Songti SC', serif);
+  font-size: clamp(20px, 2vw, 27px);
+  font-weight: 500;
+  font-style: normal;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  padding-left: 0;
+  /* 编辑排版的纸面永远是浅色，这里的字标不跟 data-tone 走 */
+  background: linear-gradient(
+    104deg,
+    rgba(16, 18, 24, 0.5) 0%,
+    rgba(12, 14, 20, 0.9) 30%,
+    color-mix(in srgb, var(--accent) 58%, #1b1d26) 72%,
+    rgba(16, 18, 24, 0.58) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  filter: none;
+}
+
+html[data-style='editorial'] .icon-btn.glass {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  background: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html[data-style='editorial'] .icon-btn.glass.is-active {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+
+/* ---- 设置面板：纸面 ---- */
+
+html[data-style='editorial'] .settings-nav {
+  background: rgba(25, 23, 19, 0.025);
+}
+
+html[data-style='editorial'] .nav-item {
+  border-radius: 2px;
+}
+
+html[data-style='editorial'] .nav-item.is-active {
+  background: rgba(25, 23, 19, 0.07);
+  color: var(--ink);
+  font-weight: 650;
+}
+
+html[data-style='editorial'] .rows,
+html[data-style='editorial'] .seg,
+html[data-style='editorial'] .swatch,
+html[data-style='editorial'] .btn,
+html[data-style='editorial'] .text-input,
+html[data-style='editorial'] .color-dot {
+  border-radius: 2px;
+}
+
+html[data-style='editorial'] .switch {
+  border-radius: 99px;
+}
+
+html[data-style='editorial'] .seg button {
+  border-radius: 1px;
+}
+
+html[data-style='editorial'] .settings-title {
+  font-family: var(--font-display);
+  font-weight: 500;
+}
+
+html[data-style='editorial'] .group-title,
+html[data-style='editorial'] .settings-desc {
+  font-family: var(--font-meta);
+}
+
+html[data-style='editorial'] .settings-desc {
+  letter-spacing: 0.02em;
+}
+
+html[data-style='editorial'] .settings-close,
+html[data-style='editorial'] .card-action,
+html[data-style='editorial'] .modal-card,
+html[data-style='editorial'] .menu,
+html[data-style='editorial'] .toast,
+html[data-style='editorial'] .swatch,
+html[data-style='editorial'] .icon-preview,
+html[data-style='editorial'] .emoji-grid,
+html[data-style='editorial'] .emoji-grid button,
+html[data-style='editorial'] .icon-tabs button {
+  border-radius: 2px;
+}
+
+html[data-style='editorial'] .todo-check {
+  border-radius: 1px;
+}
+
+/* ==========================================================================
+   3. terminal —— 终端
+   等宽、直角、编号行、无图标底板。最像工具的一套。
+   ========================================================================== */
+
+html[data-style='terminal'] {
+  --mono: ui-monospace, 'SF Mono', 'JetBrains Mono', 'Cascadia Mono', Consolas, 'Courier New', monospace;
+  --term-line: #1b1f24;
+  --term-hi: #2b3138;
+
+  --fg: #dfe3e6;
+  --fg-1: rgba(223, 227, 230, 0.94);
+  --fg-2: rgba(223, 227, 230, 0.58);
+  --fg-3: rgba(223, 227, 230, 0.34);
+  --fg-4: rgba(223, 227, 230, 0.15);
+
+  --glass-bg: transparent;
+  --glass-bg-hover: rgba(126, 231, 135, 0.07);
+  --glass-border: var(--term-line);
+  --glass-border-strong: var(--term-hi);
+  --glass-shadow: none;
+
+  --panel-bg: #0a0c0f;
+  --panel-bg-solid: #0a0c0f;
+  --panel-border: var(--term-line);
+  --panel-shadow: 0 30px 80px rgba(0, 0, 0, 0.72);
+
+  --menu-bg: #0a0c0f;
+  --menu-hover: rgba(126, 231, 135, 0.09);
+
+  --divider: var(--term-line);
+  --input-bg: transparent;
+  --input-border: var(--term-line);
+  --text-shadow: none;
+  --scrim: rgba(3, 4, 6, 0.72);
+  --veil-rgb: 6, 7, 10;
+}
+
+html[data-style='terminal'] body,
+html[data-style='terminal'] .clock,
+html[data-style='terminal'] .tile-label,
+html[data-style='terminal'] .settings-title,
+html[data-style='terminal'] .modal-title,
+html[data-style='terminal'] .weather-temp {
+  font-family: var(--mono);
+}
+
+html[data-style='terminal'] .content {
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 26px;
+  padding: clamp(64px, 9vh, 100px) clamp(24px, 5vw, 72px) 48px;
+}
+
+html[data-style='terminal'] .bg {
+  background: #06070a;
+}
+
+html[data-style='terminal'] .bg-media,
+html[data-style='terminal'] .bg-veil,
+html[data-style='terminal'] .bg-vignette {
+  display: none;
+}
+
+html[data-style='terminal'] .hero {
+  align-items: flex-start;
+  text-align: left;
+  gap: 6px;
+}
+
+html[data-style='terminal'] .greeting {
+  order: -1;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  color: var(--fg-3);
+  margin-bottom: 8px;
+}
+
+html[data-style='terminal'] .greeting svg {
+  display: none;
+}
+
+html[data-style='terminal'] .greeting::before {
+  content: '# ';
+  color: var(--accent);
+}
+
+html[data-style='terminal'] .clock {
+  font-weight: 300;
+  letter-spacing: -0.02em;
+}
+
+html[data-style='terminal'] .clock-time {
+  font-size: clamp(38px, 4.4vw, 56px);
+}
+
+html[data-style='terminal'] .dateline {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  justify-content: flex-start;
+  color: var(--fg-3);
+}
+
+html[data-style='terminal'] .festival {
+  height: auto;
+  padding: 0 5px;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+}
+
+/* ---- 搜索：命令行 ---- */
+
+html[data-style='terminal'] .search-wrap {
+  width: var(--search-w, min(560px, 100%));
+}
+
+html[data-style='terminal'] .search {
+  height: 40px;
+  padding: 0;
+  gap: 8px;
+  border: none;
+  border-bottom: 1px solid var(--term-line);
+  border-radius: 0;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+}
+
+html[data-style='terminal'] .search::before {
+  content: '>';
+  flex: none;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--accent);
+  opacity: 0.9;
+}
+
+html[data-style='terminal'] .search:hover {
+  background: transparent;
+  border-bottom-color: var(--term-hi);
+}
+
+html[data-style='terminal'] .search.is-focused {
+  background: transparent;
+  border-bottom-color: var(--accent);
+  box-shadow: none;
+  transform: none;
+}
+
+html[data-style='terminal'] .engine-btn {
+  height: 32px;
+  padding: 0 6px 0 0;
+  border-radius: 0;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+html[data-style='terminal'] .engine-btn:hover {
+  background: none;
+  color: var(--accent);
+}
+
+html[data-style='terminal'] .engine-badge {
+  width: 15px;
+  height: 15px;
+  border-radius: 0;
+  font-size: 8px;
+  box-shadow: none;
+}
+
+html[data-style='terminal'] .search-input {
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+html[data-style='terminal'] .search-input::placeholder {
+  color: var(--fg-4);
+}
+
+html[data-style='terminal'] .search-submit {
+  display: none;
+}
+
+html[data-style='terminal'] .search-hint {
+  justify-content: flex-start;
+  opacity: 1;
+  margin-top: 9px;
+  font-family: var(--mono);
+  font-size: 10px;
+}
+
+html[data-style='terminal'] .search-hint kbd {
+  background: none;
+  border: none;
+  padding: 0 2px;
+  font-size: 9.5px;
+  color: var(--fg-2);
+}
+
+html[data-style='terminal'] .suggest {
+  border-radius: 0;
+  background: #0a0c0f;
+  border: 1px solid var(--term-line);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  font-family: var(--mono);
+}
+
+html[data-style='terminal'] .suggest-item {
+  border-radius: 0;
+  font-size: 12px;
+}
+
+/* ---- 编号行 ---- */
+
+html[data-style='terminal'] .dock {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+html[data-style='terminal'] .grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: min(var(--list-w), 100%);
+  max-width: 100%;
+  border-left: 1px solid var(--term-line);
+  counter-reset: lm-tile;
+}
+
+html[data-style='terminal'] .grid--enter .tile {
+  animation: none;
+}
+
+html[data-style='terminal'] .tile {
+  flex: 0 0 auto;
+  width: 100%;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: 0;
+  counter-increment: lm-tile;
+  transition: background 0.14s var(--ease);
+}
+
+html[data-style='terminal'] .tile::before {
+  content: counter(lm-tile, decimal-leading-zero);
+  flex: none;
+  width: 22px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--fg-4);
+}
+
+html[data-style='terminal'] .tile::after {
+  content: attr(data-host);
+  margin-left: auto;
+  padding-left: 16px;
+  flex: none;
+  max-width: 44%;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: rgba(223, 227, 230, 0.3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+html[data-style='terminal'] .tile:hover {
+  background: rgba(126, 231, 135, 0.06);
+}
+
+html[data-style='terminal'] .tile:hover::before {
+  color: var(--accent);
+}
+
+html[data-style='terminal'] .tile:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+html[data-style='terminal'] .tile-icon {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+}
+
+html[data-style='terminal'] .tile:hover .tile-icon {
+  transform: none;
+  box-shadow: none;
+}
+
+html[data-style='terminal'] .tile-icon::after {
+  display: none;
+}
+
+html[data-style='terminal'] .tile-mono {
+  font-family: var(--mono);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: var(--term-line);
+  color: transparent;
+  border: none;
+  opacity: 1;
+}
+
+html[data-style='terminal'] .tile:hover .tile-mono {
+  background: var(--accent);
+}
+
+html[data-style='terminal'] .folder-mini > span {
+  background: var(--term-line);
+}
+
+html[data-style='terminal'] .engine-badge {
+  background: none !important;
+  border: 1px solid var(--accent) !important;
+  color: var(--accent) !important;
+  font-weight: 700;
+}
+
+html[data-style='terminal'] .tile-img {
+  padding: 0;
+  filter: grayscale(1);
+  opacity: 0.6;
+}
+
+html[data-style='terminal'] .tile:hover .tile-img {
+  filter: none;
+  opacity: 1;
+}
+
+html[data-style='terminal'] .tile-label {
+  display: block;
+  min-width: 0;
+  max-width: none;
+  font-size: 12.5px;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--fg-2);
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  -webkit-line-clamp: unset;
+}
+
+html[data-style='terminal'] .tile:hover .tile-label {
+  color: var(--accent);
+}
+
+html[data-style='terminal'] .folder-mini {
+  width: 15px;
+  height: 15px;
+  gap: 1px;
+}
+
+html[data-style='terminal'] .folder-mini > span {
+  border-radius: 0;
+  font-size: 0;
+  color: transparent;
+}
+
+html[data-style='terminal'] .folder-badge {
+  display: none;
+}
+
+html[data-style='terminal'] .tile--add {
+  counter-increment: none;
+}
+
+html[data-style='terminal'] .tile--add::before {
+  content: '+';
+  font-size: 12px;
+  color: var(--fg-3);
+}
+
+html[data-style='terminal'] .tile--add::after {
+  content: '';
+}
+
+html[data-style='terminal'] .tile--add .tile-icon {
+  display: none;
+}
+
+html[data-style='terminal'] .tile--add .tile-label {
+  color: var(--fg-3);
+}
+
+/* ---- 侧栏 ---- */
+
+html[data-style='terminal'] .sidebar {
+  padding-top: clamp(64px, 9vh, 100px);
+  padding-right: clamp(20px, 2.6vw, 44px);
+  gap: 18px;
+}
+
+html[data-style='terminal'] .card {
+  background: transparent;
+  border: 1px solid var(--term-line);
+  border-radius: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  padding: 10px 12px;
+}
+
+html[data-style='terminal'] .card:hover {
+  background: transparent;
+  border-color: var(--term-hi);
+}
+
+html[data-style='terminal'] .card-title {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  color: var(--fg-3);
+}
+
+html[data-style='terminal'] .card-title .count {
+  border-radius: 0;
+  background: none;
+  border: 1px solid var(--term-line);
+}
+
+html[data-style='terminal'] .todo-add {
+  border-radius: 0;
+  border: none;
+  border-bottom: 1px solid var(--term-line);
+}
+
+html[data-style='terminal'] .todo-add input,
+html[data-style='terminal'] .todo-text,
+html[data-style='terminal'] .forecast-name,
+html[data-style='terminal'] .forecast-temp,
+html[data-style='terminal'] .weather-meta,
+html[data-style='terminal'] .notes-area {
+  font-family: var(--mono);
+}
+
+html[data-style='terminal'] .todo-item:hover {
+  background: rgba(126, 231, 135, 0.06);
+  border-radius: 0;
+}
+
+html[data-style='terminal'] .todo-check {
+  border-radius: 0;
+}
+
+html[data-style='terminal'] .weather-temp {
+  font-weight: 300;
+}
+
+html[data-style='terminal'] .notes-area {
+  min-height: 64px;
+}
+
+html[data-style='terminal'] .icon-btn.glass {
+  border: 1px solid var(--term-line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* 终端：等宽大写 + 光标块，像命令行提示符 */
+html[data-style='terminal'] .brand::before {
+  inset: -18px -20px;
+  opacity: 0.16;
+  filter: blur(12px);
+}
+
+html[data-style='terminal'] .brand-word {
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  background: none;
+  -webkit-text-fill-color: currentColor;
+  color: var(--accent);
+  filter: none;
+}
+
+html[data-style='terminal'] .brand-word::after {
+  content: '';
+  display: inline-block;
+  width: 0.46em;
+  height: 0.86em;
+  margin-left: 0.18em;
+  transform: translateY(0.08em);
+  background: var(--accent);
+  opacity: 0.72;
+  animation: term-caret 1.15s steps(1, end) infinite;
+}
+
+@keyframes term-caret {
+  0%,
+  46% {
+    opacity: 0.72;
+  }
+  54%,
+  100% {
+    opacity: 0;
+  }
+}
+
+html[data-style='terminal'] .icon-btn.glass.is-active {
+  background: rgba(126, 231, 135, 0.12);
+  border-color: var(--accent);
+}
+
+/* ---- 设置/弹窗：去掉一切圆角 ---- */
+
+html[data-style='terminal'] .settings-panel,
+html[data-style='terminal'] .modal-card,
+html[data-style='terminal'] .menu,
+html[data-style='terminal'] .toast,
+html[data-style='terminal'] .rows,
+html[data-style='terminal'] .seg,
+html[data-style='terminal'] .seg button,
+html[data-style='terminal'] .swatch,
+html[data-style='terminal'] .btn,
+html[data-style='terminal'] .text-input,
+html[data-style='terminal'] .nav-item,
+html[data-style='terminal'] .settings-close,
+html[data-style='terminal'] .card-action,
+html[data-style='terminal'] .menu-item,
+html[data-style='terminal'] .icon-preview,
+html[data-style='terminal'] .emoji-grid,
+html[data-style='terminal'] .emoji-grid button,
+html[data-style='terminal'] .icon-tabs button,
+html[data-style='terminal'] .color-dot,
+html[data-style='terminal'] .stepper,
+html[data-style='terminal'] .stepper-btn,
+html[data-style='terminal'] .switch,
+html[data-style='terminal'] .switch::after {
+  border-radius: 0;
+}
+
+html[data-style='terminal'] .settings-nav {
+  background: transparent;
+}
+
+html[data-style='terminal'] .nav-item.is-active {
+  background: rgba(126, 231, 135, 0.1);
+  color: var(--accent);
+}
+
+html[data-style='terminal'] .settings-title,
+html[data-style='terminal'] .group-title,
+html[data-style='terminal'] .row-label .name,
+html[data-style='terminal'] .row-label .hint,
+html[data-style='terminal'] .kbd-list,
+html[data-style='terminal'] .perm-table {
+  font-family: var(--mono);
+}
+
+html[data-style='terminal'] kbd {
+  border-radius: 0;
+}
+
+/* ==========================================================================
+   4. 风格选择器（设置页）
+   ========================================================================== */
+
+.style-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.style-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 7px;
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--divider);
+  background: var(--input-bg);
+  transition: border-color 0.16s var(--ease), transform 0.16s var(--ease-spring);
+  text-align: left;
+}
+
+.style-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--glass-border-strong);
+}
+
+.style-card.is-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.style-thumb {
+  position: relative;
+  height: 54px;
+  border-radius: calc(var(--radius-md) * 0.6);
+  border: 1px solid var(--divider);
+  overflow: hidden;
+}
+
+.style-thumb::before,
+.style-thumb::after {
+  content: '';
+  position: absolute;
+  left: 9px;
+  right: 9px;
+  border-radius: 2px;
+}
+
+.style-thumb::before {
+  top: 11px;
+  height: 6px;
+  background: currentColor;
+  opacity: 0.42;
+}
+
+.style-thumb::after {
+  top: 24px;
+  height: 6px;
+  right: 34px;
+  background: currentColor;
+  opacity: 0.2;
+}
+
+.style-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 3px 3px;
+}
+
+.style-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--fg-1);
+}
+
+/* 「网格 / 列表」形态标签——决定这套风格下快捷方式怎么排 */
+.style-form {
+  padding: 1px 5px;
+  border-radius: 99px;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+}
+
+.style-form.is-grid {
+  color: color-mix(in srgb, var(--accent) 82%, #fff);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.style-form.is-list {
+  color: var(--fg-3);
+  background: color-mix(in srgb, var(--fg-3) 14%, transparent);
+}
+
+/* 缩略图直接画出形态：网格风格是小方块阵，列表风格是两根横条 */
+.style-thumb.is-grid::before {
+  top: 11px;
+  bottom: 11px;
+  height: auto;
+  border-radius: 0;
+  background: radial-gradient(circle, currentColor 0 2.6px, transparent 3.2px) 50% 0 / 25% 50% repeat;
+  opacity: 0.55;
+}
+
+.style-thumb.is-grid::after {
+  display: none;
+}
+
+.style-sub {
+  font-size: 10.5px;
+  color: var(--fg-3);
+  line-height: 1.35;
+}
+
+@media (max-width: 760px) {
+  .style-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

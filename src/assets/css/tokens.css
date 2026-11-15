@@ -1,0 +1,269 @@
+@charset "UTF-8";
+/* ============================================================================
+   Lumen · 设计令牌
+   ----------------------------------------------------------------------------
+   所有可调项都由 JS 写入 CSS 变量；这里只负责「默认值 + 双色调语义」。
+   tone=dark  —— 深色壁纸上的浅色文字
+   tone=light —— 浅色壁纸上的深色文字
+   ========================================================================== */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI Variable Display', 'Segoe UI',
+    'PingFang SC', 'HarmonyOS Sans SC', 'MiSans', 'Hiragino Sans GB', 'Microsoft YaHei UI',
+    'Microsoft YaHei', 'Source Han Sans SC', 'Noto Sans CJK SC', system-ui, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', 'Cascadia Mono', Consolas, monospace;
+
+  /* --- 用户可调 --- */
+  --accent: #6c8cff;
+  --glass-blur: 18px;
+  --radius-xs: 8px;
+  --radius-sm: 12px;
+  --radius-md: 18px;
+  --radius-lg: 24px;
+  --radius-xl: 30px;
+  --icon-size: 60px;
+  --grid-gap: 20px;
+  --grid-cols: 6;
+  --cell: 86px;
+  --font-scale: 1;
+
+  /* 内容列宽：搜索框、图标网格、列表型风格共用同一列，保证左边缘对齐。
+     JS 会按「列数 × 单元宽 + 间隙」算出真实值。 */
+  --dock-w: 571px;
+  --list-w: clamp(420px, var(--dock-w), 780px);
+  /* 搜索框与图标网格同宽，但保留 420px 下限：列数调小时不至于窄到没法用 */
+  --search-w: min(clamp(420px, var(--dock-w), 100%), 100%);
+
+  /* --- 行为 --- */
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --dur-1: 0.14s;
+  --dur-2: 0.22s;
+  --dur-3: 0.34s;
+
+  --icon-tint: 0.28;
+  --sidebar-w: 312px;
+
+  font-size: calc(16px * var(--font-scale));
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-size-adjust: 100%;
+}
+
+/* ------------------------------------------------------------------ 深色调 */
+
+html[data-tone='dark'] {
+  --fg: #ffffff;
+  --fg-1: rgba(255, 255, 255, 0.92);
+  --fg-2: rgba(255, 255, 255, 0.66);
+  --fg-3: rgba(255, 255, 255, 0.42);
+  --fg-4: rgba(255, 255, 255, 0.22);
+
+  --glass-bg: rgba(255, 255, 255, 0.09);
+  --glass-bg-hover: rgba(255, 255, 255, 0.16);
+  --glass-border: rgba(255, 255, 255, 0.14);
+  --glass-border-strong: rgba(255, 255, 255, 0.22);
+  --glass-shadow: 0 10px 34px rgba(0, 0, 0, 0.28);
+
+  --panel-bg: rgba(19, 21, 29, 0.78);
+  --panel-bg-solid: #14161f;
+  --panel-border: rgba(255, 255, 255, 0.1);
+  --panel-shadow: 0 32px 90px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.28);
+
+  --menu-bg: rgba(30, 32, 42, 0.86);
+  --menu-hover: rgba(255, 255, 255, 0.1);
+
+  --divider: rgba(255, 255, 255, 0.09);
+  --input-bg: rgba(255, 255, 255, 0.07);
+  --input-border: rgba(255, 255, 255, 0.13);
+  --input-focus: rgba(255, 255, 255, 0.2);
+
+  --text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --scrim: rgba(6, 8, 14, 0.56);
+  --veil-rgb: 6, 8, 14;
+}
+
+/* ------------------------------------------------------------------ 浅色调 */
+
+html[data-tone='light'] {
+  --fg: #0b0d13;
+  --fg-1: rgba(12, 14, 20, 0.9);
+  --fg-2: rgba(12, 14, 20, 0.6);
+  --fg-3: rgba(12, 14, 20, 0.38);
+  --fg-4: rgba(12, 14, 20, 0.16);
+
+  --glass-bg: rgba(255, 255, 255, 0.52);
+  --glass-bg-hover: rgba(255, 255, 255, 0.74);
+  --glass-border: rgba(12, 14, 20, 0.07);
+  --glass-border-strong: rgba(12, 14, 20, 0.12);
+  --glass-shadow: 0 10px 30px rgba(31, 41, 74, 0.12);
+
+  --panel-bg: rgba(255, 255, 255, 0.82);
+  --panel-bg-solid: #fbfbfe;
+  --panel-border: rgba(12, 14, 20, 0.08);
+  --panel-shadow: 0 32px 80px rgba(31, 41, 74, 0.2), 0 2px 8px rgba(31, 41, 74, 0.08);
+
+  --menu-bg: rgba(255, 255, 255, 0.9);
+  --menu-hover: rgba(12, 14, 20, 0.06);
+
+  --divider: rgba(12, 14, 20, 0.07);
+  --input-bg: rgba(255, 255, 255, 0.66);
+  --input-border: rgba(12, 14, 20, 0.1);
+  --input-focus: rgba(12, 14, 20, 0.16);
+
+  --text-shadow: none;
+  --scrim: rgba(24, 30, 46, 0.32);
+  --veil-rgb: 255, 255, 255;
+}
+
+/* ------------------------------------------------------------ 性能 / 动效 */
+
+html[data-perf='1'] {
+  --glass-blur: 0px;
+}
+
+html[data-perf='1'] .glass,
+html[data-perf='1'] .tile-icon,
+html[data-perf='1'] .panel,
+html[data-perf='1'] .menu {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html[data-anim='0'] *,
+html[data-anim='0'] *::before,
+html[data-anim='0'] *::after {
+  animation-duration: 0.001ms !important;
+  animation-delay: 0ms !important;
+  transition-duration: 0.001ms !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* ------------------------------------------------------------------ 基础 */
+
+body {
+  font-family: var(--font-sans);
+  color: var(--fg-1);
+  background: #0a0d16;
+  overflow: hidden;
+  letter-spacing: -0.008em;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+input,
+textarea {
+  border: none;
+  outline: none;
+  background: none;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 76%, white 24%);
+  outline-offset: 2px;
+}
+
+/* 滚动条：细、低调、跟随色调 */
+.scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--fg-4) transparent;
+}
+.scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scroll::-webkit-scrollbar-thumb {
+  background: var(--fg-4);
+  border-radius: 99px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+.scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--fg-3);
+  background-clip: content-box;
+}
+
+/* ------------------------------------------------------------------ 通用 */
+
+.glass {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(var(--glass-blur)) saturate(170%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(170%);
+  box-shadow: var(--glass-shadow);
+}
+
+.ico {
+  display: block;
+  flex: none;
+  pointer-events: none;
+}
+
+.ico-wrap {
+  display: contents;
+}
+
+.text-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

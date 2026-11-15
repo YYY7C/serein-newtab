@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-tone="dark" data-perf="0" data-anim="1" data-sidebar="right">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark light" />
+    <title>新标签页</title>
+    <link rel="icon" href="assets/img/icon-32.png" />
+    <link rel="stylesheet" href="assets/css/tokens.css" />
+    <link rel="stylesheet" href="assets/css/app.css" />
+    <link rel="stylesheet" href="assets/css/overlays.css" />
+    <link rel="stylesheet" href="assets/css/styles.css" />
+  </head>
+  <body>
+    <!-- 背景三层：媒体 / 遮罩 / 暗角 -->
+    <div class="bg" id="bg" aria-hidden="true">
+      <div class="bg-media" id="bg-media"></div>
+      <div class="bg-veil" id="bg-veil"></div>
+      <div class="bg-vignette" id="bg-vignette"></div>
+    </div>
+
+    <div class="stage">
+      <!-- 顶栏横跨整个舞台：侧边栏展开时右侧按钮仍贴窗口右缘 -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <div class="brand" id="brand">
+            <span class="brand-word">Lumen</span>
+          </div>
+        </div>
+        <div class="topbar-right" id="topbar-right"></div>
+      </header>
+
+      <div class="main">
+        <main class="content" id="content">
+          <section class="hero" id="hero">
+            <div class="greeting" id="greeting"></div>
+            <div class="clock" id="clock">
+              <span class="clock-time" id="clock-time">--:--</span>
+              <span class="clock-meridiem" id="clock-meridiem" hidden></span>
+              <span class="clock-seconds" id="clock-seconds" hidden></span>
+            </div>
+            <div class="dateline" id="dateline"></div>
+          </section>
+
+          <div class="search-wrap" id="search-wrap">
+            <form class="search" id="search-form" autocomplete="off" role="search">
+              <button type="button" class="engine-btn" id="engine-btn" title="切换搜索引擎"></button>
+              <input
+                class="search-input"
+                id="search-input"
+                type="text"
+                placeholder="搜索，或输入网址"
+                spellcheck="false"
+                autocomplete="off"
+                autocapitalize="off"
+                aria-label="搜索"
+              />
+              <button type="submit" class="search-submit" id="search-submit" aria-label="搜索"></button>
+            </form>
+            <div class="suggest" id="suggest" role="listbox"></div>
+            <div class="search-hint" id="search-hint"></div>
+          </div>
+
+          <section class="dock" aria-label="快捷方式">
+            <div class="grid" id="grid"></div>
+          </section>
+        </main>
+      </div>
+
+      <aside class="sidebar" id="sidebar" aria-label="小组件"></aside>
+    </div>
+
+    <div id="overlay-root"></div>
+    <div class="toast-root" id="toast-root" aria-live="polite"></div>
+
+    <script type="module" src="assets/js/main.js"></script>
+  </body>
+</html>
