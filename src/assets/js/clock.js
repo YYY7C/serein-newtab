@@ -85,7 +85,12 @@ function tick(force = false) {
     meridiem = hh < 12 ? 'AM' : 'PM';
   }
 
-  if (layout.showClock && els.time.textContent !== timeText) els.time.textContent = timeText;
+  if (layout.showClock && els.time.dataset.text !== timeText) {
+    els.time.dataset.text = timeText;
+    const [hourPart, minutePart] = timeText.split(':');
+    // 冒号单独一层：细字重下才能单独缩小/抬高，不然整串数字会显得「掉下去」
+    els.time.innerHTML = `<span class="clock-h">${hourPart}</span><span class="clock-sep">:</span><span class="clock-m">${minutePart}</span>`;
+  }
   if (!layout.clock24) els.meridiem.textContent = meridiem;
   if (layout.showSeconds) els.seconds.textContent = String(ss).padStart(2, '0');
 

@@ -285,7 +285,6 @@ export function initTiles() {
   store.subscribe((scope) => {
     if (scope === 'shortcuts' || scope === 'groups' || scope === 'config' || scope === 'all') renderGrid();
   });
-  window.addEventListener('resize', () => { /* 网格自适应由 CSS 处理 */ });
 }
 
 export function renderGrid() {
@@ -304,6 +303,8 @@ export function renderGrid() {
   gridSignature = signature;
 
   clear(gridEl);
+  // 一次性插入：逐个 append 会触发 N 次布局，网格越大越明显
+  const fragment = document.createDocumentFragment();
 
   if (!items.length) {
     gridEl.appendChild(
@@ -320,12 +321,13 @@ export function renderGrid() {
   }
 
   items.forEach((entry, index) => {
-    gridEl.appendChild(
+    fragment.appendChild(
       entry.kind === 'group' ? buildFolderTile(entry.item, index) : buildShortcutTile(entry.item, index)
     );
   });
 
-  gridEl.appendChild(buildAddTile(items.length));
+  fragment.appendChild(buildAddTile(items.length));
+  gridEl.appendChild(fragment);
 
   if (firstRender) {
     gridEl.classList.add('grid--enter');

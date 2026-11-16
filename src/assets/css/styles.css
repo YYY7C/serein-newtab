@@ -261,6 +261,448 @@ html[data-style='noir'] .nav-item.is-active {
 }
 
 /* ==========================================================================
+   1.1 paper —— 白纸
+   把 noir 的「固态表面 + 发丝线 + 噪点」翻到纸面一侧：
+   暖白纸底、墨色文字、衬线数字；壁纸只留一层去饱和的暖灰。
+   ========================================================================== */
+
+html[data-style='paper'] {
+  --surface-0: #ece7dc;
+  --surface-1: #fbf8f1;
+  --surface-2: #f4efe4;
+  --hair: rgba(48, 42, 32, 0.14);
+  --hair-strong: rgba(48, 42, 32, 0.24);
+
+  --fg: #1d1a15;
+  --fg-1: rgba(29, 26, 21, 0.92);
+  --fg-2: rgba(29, 26, 21, 0.64);
+  --fg-3: rgba(29, 26, 21, 0.42);
+  --fg-4: rgba(29, 26, 21, 0.16);
+
+  --glass-bg: var(--surface-1);
+  --glass-bg-hover: #fffdf8;
+  --glass-border: var(--hair);
+  --glass-border-strong: var(--hair-strong);
+  --glass-shadow: inset 0 1px 0 #ffffff, 0 1px 2px rgba(60, 50, 30, 0.06);
+
+  --panel-bg: #fdfaf3;
+  --panel-bg-solid: #fbf8f1;
+  --panel-border: var(--hair);
+  --panel-shadow: 0 24px 70px rgba(70, 58, 36, 0.18), 0 1px 2px rgba(70, 58, 36, 0.08);
+
+  --menu-bg: #fffdf8;
+  --menu-hover: rgba(60, 50, 30, 0.05);
+
+  --divider: rgba(48, 42, 32, 0.09);
+  --input-bg: rgba(255, 255, 255, 0.72);
+  --input-border: rgba(48, 42, 32, 0.13);
+  --text-shadow: none;
+  --scrim: rgba(40, 34, 24, 0.4);
+  --veil-rgb: 243, 237, 224;
+
+  --font-display: 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', 'Songti SC',
+    'Noto Serif SC', Georgia, serif;
+}
+
+/* 壁纸只作为纸纹存在：降饱和 + 一层暖白遮罩，靠 JS 的 STYLE_VEIL 拉高到 0.88 */
+/* 不要对整个 .bg 去饱和：那会把遮罩层的暖色一起洗成中性灰。
+   纸面的暖意来自 --veil-rgb，壁纸只透出 7%。 */
+html[data-style='paper'] .bg {
+  filter: contrast(0.97) brightness(1.02);
+}
+
+html[data-style='paper'] .bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url('../img/noise.png');
+  background-repeat: repeat;
+  opacity: 0.08;
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+
+/* ---- 表面：一块块纸，不用模糊 ---- */
+
+html[data-style='paper'] .card,
+html[data-style='paper'] .search,
+html[data-style='paper'] .icon-btn.glass {
+  background: var(--surface-1);
+  border: 1px solid var(--hair);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: inset 0 1px 0 #ffffff, 0 1px 2px rgba(60, 50, 30, 0.07);
+}
+
+html[data-style='paper'] .card:hover,
+html[data-style='paper'] .search:hover {
+  background: #fffdf8;
+}
+
+html[data-style='paper'] .search {
+  height: 54px;
+  border-radius: 13px;
+}
+
+html[data-style='paper'] .search.is-focused {
+  background: #fffdf8;
+  border-color: var(--hair-strong);
+  box-shadow: inset 0 1px 0 #ffffff,
+    0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+  transform: none;
+}
+
+html[data-style='paper'] .engine-btn,
+html[data-style='paper'] .search-submit,
+html[data-style='paper'] .todo-add,
+html[data-style='paper'] .card-action {
+  border-radius: 9px;
+}
+
+html[data-style='paper'] .icon-btn.glass {
+  border-radius: 9px;
+}
+
+html[data-style='paper'] .icon-btn.glass.is-active {
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface-1));
+}
+
+/* ---- 磁贴：白纸上的白色方块，靠发丝线和极浅投影分隔 ---- */
+
+html[data-style='paper'] .tile-icon {
+  background: #ffffff;
+  border: 1px solid var(--hair);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: 0 1px 2px rgba(60, 50, 30, 0.08);
+}
+
+html[data-style='paper'] .tile:hover .tile-icon {
+  box-shadow: 0 10px 22px rgba(60, 50, 30, 0.16), 0 1px 2px rgba(60, 50, 30, 0.1);
+}
+
+html[data-style='paper'] .tile-icon.is-brand {
+  background: #ffffff;
+  border-color: var(--hair);
+  box-shadow: 0 1px 3px rgba(60, 50, 30, 0.1);
+}
+
+html[data-style='paper'] .tile:hover .tile-icon.is-brand {
+  box-shadow: 0 10px 22px rgba(60, 50, 30, 0.16), 0 1px 3px rgba(60, 50, 30, 0.1);
+}
+
+html[data-style='paper'] .tile--add .tile-icon {
+  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+  border: 1.5px dashed var(--hair-strong);
+  box-shadow: none;
+}
+
+html[data-style='paper'] .folder-mini > span {
+  box-shadow: inset 0 0 0 1px rgba(48, 42, 32, 0.12);
+}
+
+html[data-style='paper'] .folder-mini .empty {
+  background: #ffffff;
+}
+
+html[data-style='paper'] .folder-badge {
+  box-shadow: 0 1px 4px rgba(60, 50, 30, 0.24);
+  border-color: #fff;
+}
+
+/* ---- 排版：字标与数字 ---- */
+
+html[data-style='paper'] .brand::before {
+  background: radial-gradient(
+    60% 60% at 34% 50%,
+    color-mix(in srgb, var(--accent) 16%, transparent) 0%,
+    transparent 76%
+  );
+  opacity: 0.5;
+}
+
+html[data-style='paper'] .brand-word {
+  font-weight: 400;
+  letter-spacing: 0.34em;
+  background: none;
+  -webkit-text-fill-color: currentColor;
+  color: #1d1a15;
+  filter: none;
+}
+
+html[data-style='paper'] .clock {
+  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  color: #191611;
+}
+
+html[data-style='paper'] .clock-time {
+  font-size: clamp(56px, 8.4vw, 118px);
+}
+
+html[data-style='paper'] .clock-sep {
+  font-weight: 400;
+  opacity: 0.42;
+  transform: translateY(-0.04em);
+}
+
+html[data-style='paper'] .greeting,
+html[data-style='paper'] .dateline {
+  color: var(--fg-2);
+  letter-spacing: 0.04em;
+}
+
+html[data-style='paper'] .dateline .dot {
+  opacity: 0.3;
+}
+
+html[data-style='paper'] .festival {
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--accent) 88%, #000 12%);
+  box-shadow: none;
+  height: 20px;
+  font-size: 10.5px;
+}
+
+html[data-style='paper'] .card-title {
+  color: var(--fg-3);
+}
+
+html[data-style='paper'] .todo-check {
+  border-radius: 5px;
+}
+
+html[data-style='paper'] .nav-item.is-active {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--fg-1);
+}
+
+/* ==========================================================================
+   1.2 native —— 原色
+   壁纸原样呈现，图标还原成品牌色圆形直接浮在壁纸上；
+   表面只在需要的地方出现（搜索、卡片、按钮），不遮挡画面。
+   ========================================================================== */
+
+html[data-style='native'] .bg {
+  filter: none;
+}
+
+html[data-style='native'] .tile {
+  gap: 9px;
+}
+
+html[data-style='native'] .tile-icon {
+  border: 0;
+  border-radius: 50%;
+  background: #ffffff;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.26), 0 2px 6px rgba(0, 0, 0, 0.18);
+}
+
+/* 原色风格不要描边环：让图标本身成为主体 */
+html[data-style='native'] .tile-icon::after,
+html[data-style='native'] .tile-icon.is-brand::after {
+  display: none;
+}
+
+html[data-style='native'] .tile:hover .tile-icon {
+  transform: translateY(-4px) scale(1.05);
+  box-shadow: 0 18px 38px rgba(0, 0, 0, 0.32), 0 3px 8px rgba(0, 0, 0, 0.2);
+}
+
+html[data-style='native'] .tile-icon.is-brand {
+  background: #ffffff;
+}
+
+html[data-style='native'] .tile-icon.is-brand .tile-img {
+  border-radius: 50%;
+}
+
+html[data-style='native'] .folder-mini {
+  width: 64%;
+  height: 64%;
+  gap: 2px;
+}
+
+html[data-style='native'] .folder-mini > span {
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(12, 14, 20, 0.1);
+}
+
+html[data-style='native'] .folder-mini .empty {
+  background: rgba(12, 14, 20, 0.06);
+  border: 0;
+  box-shadow: none;
+}
+
+html[data-style='native'][data-tone='dark'] .folder-mini .empty {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+html[data-style='native'] .tile-mono {
+  border-radius: 50%;
+}
+
+html[data-style='native'] .tile--add .tile-icon {
+  background: rgba(255, 255, 255, 0.12);
+  border: 1.5px dashed rgba(255, 255, 255, 0.45);
+  box-shadow: none;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+html[data-style='native'][data-tone='light'] .tile--add .tile-icon {
+  background: rgba(12, 14, 20, 0.06);
+  border-color: rgba(12, 14, 20, 0.28);
+  color: rgba(12, 14, 20, 0.6);
+}
+
+html[data-style='native'] .tile-label {
+  color: rgba(255, 255, 255, 0.94);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55), 0 0 14px rgba(0, 0, 0, 0.32);
+}
+
+html[data-style='native'] .tile:hover .tile-label {
+  color: #ffffff;
+}
+
+html[data-style='native'][data-tone='light'] .tile-label {
+  color: rgba(12, 14, 20, 0.86);
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.6);
+}
+
+html[data-style='native'][data-tone='light'] .tile:hover .tile-label {
+  color: #0b0d13;
+}
+
+html[data-style='native'] .tile--add .tile-label {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+html[data-style='native'][data-tone='light'] .tile--add .tile-label {
+  color: rgba(12, 14, 20, 0.5);
+}
+
+/* ---- 搜索：一块白色实体，压住壁纸，成为视觉锚点 ---- */
+
+html[data-style='native'] .search {
+  background: rgba(255, 255, 255, 0.96);
+  border-color: rgba(255, 255, 255, 0.72);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.24), 0 2px 6px rgba(0, 0, 0, 0.12);
+}
+
+html[data-style='native'] .search:hover {
+  background: #ffffff;
+}
+
+html[data-style='native'] .search.is-focused {
+  background: #ffffff;
+  border-color: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 26%, transparent),
+    0 16px 38px rgba(0, 0, 0, 0.26);
+}
+
+html[data-style='native'] .search-input {
+  color: #14161b;
+}
+
+html[data-style='native'] .search-input::placeholder {
+  color: rgba(20, 22, 27, 0.44);
+}
+
+html[data-style='native'] .engine-btn {
+  color: #14161b;
+}
+
+html[data-style='native'] .engine-btn::after {
+  background: rgba(20, 22, 27, 0.12);
+}
+
+html[data-style='native'] .search-submit {
+  color: rgba(20, 22, 27, 0.52);
+}
+
+html[data-style='native'] .search-submit:hover {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: #14161b;
+}
+
+html[data-style='native'] .search-hint {
+  color: rgba(255, 255, 255, 0.62);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+}
+
+html[data-style='native'][data-tone='light'] .search-hint {
+  color: rgba(12, 14, 20, 0.55);
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.6);
+}
+
+/* ---- 侧栏卡片：只留一层薄雾 ---- */
+
+html[data-style='native'] .card,
+html[data-style='native'] .icon-btn.glass {
+  background: rgba(12, 14, 20, 0.44);
+  border-color: rgba(255, 255, 255, 0.13);
+  backdrop-filter: blur(22px) saturate(150%);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.26);
+}
+
+html[data-style='native'] .card:hover {
+  background: rgba(16, 19, 27, 0.52);
+}
+
+html[data-style='native'][data-tone='light'] .card,
+html[data-style='native'][data-tone='light'] .icon-btn.glass {
+  background: rgba(255, 255, 255, 0.66);
+  border-color: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 16px 40px rgba(30, 40, 60, 0.16);
+}
+
+html[data-style='native'][data-tone='light'] .card:hover {
+  background: rgba(255, 255, 255, 0.78);
+}
+
+/* ---- 文字压在照片上：加深阴影保证可读 ---- */
+
+html[data-style='native'] .clock {
+  text-shadow: 0 2px 30px rgba(0, 0, 0, 0.38);
+}
+
+html[data-style='native'] .greeting,
+html[data-style='native'] .dateline {
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.5);
+}
+
+html[data-style='native'] .brand-word {
+  filter: drop-shadow(0 1px 12px rgba(0, 0, 0, 0.45));
+}
+
+html[data-style='native'][data-tone='light'] .clock {
+  text-shadow: 0 2px 24px rgba(255, 255, 255, 0.55);
+}
+
+html[data-style='native'][data-tone='light'] .greeting,
+html[data-style='native'][data-tone='light'] .dateline {
+  text-shadow: 0 1px 6px rgba(255, 255, 255, 0.6);
+}
+
+/* ---- 搜索下拉：原色下用实底，避免和壁纸打架 ---- */
+
+html[data-style='native'] .suggest {
+  background: rgba(20, 22, 30, 0.92);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+html[data-style='native'][data-tone='light'] .suggest {
+  background: rgba(255, 255, 255, 0.94);
+  border-color: rgba(12, 14, 20, 0.1);
+}
+
+/* ==========================================================================
    2. editorial —— 编辑排版
    纸色底、衬线数字、单栏目录。一切靠字号与网格说话，没有一处模糊与渐变。
    ========================================================================== */
@@ -1448,7 +1890,7 @@ html[data-style='terminal'] kbd {
 
 .style-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -1476,6 +1918,7 @@ html[data-style='terminal'] kbd {
 
 .style-thumb {
   position: relative;
+  min-width: 0;
   height: 54px;
   border-radius: calc(var(--radius-md) * 0.6);
   border: 1px solid var(--divider);

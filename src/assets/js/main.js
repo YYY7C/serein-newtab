@@ -74,10 +74,16 @@ document.addEventListener('lumen:open-settings', () => openSettings());
 
 /* --------------------------------------------------------------- 顶栏 */
 
+let topbarSignature = '';
+
 function renderTopbar() {
   const config = store.state.config;
   const right = $('#topbar-right');
   if (!right) return;
+  // 拖设置里的滑块会高频 commit('config')：顶栏只跟这几个字段有关，别每次都重建 DOM
+  const signature = `${config.background.type}|${config.sidebar}`;
+  if (signature === topbarSignature) return;
+  topbarSignature = signature;
   clear(right);
 
   if (config.background.type === 'bing') {
@@ -86,6 +92,7 @@ function renderTopbar() {
         class: 'icon-btn glass',
         type: 'button',
         title: '换一张壁纸',
+        'aria-label': '换一张壁纸',
         html: svgIcon('image', 17),
         onclick: async () => {
           await cycleBing(store.state, 1);
@@ -101,6 +108,8 @@ function renderTopbar() {
       class: `icon-btn glass${config.sidebar === 'hidden' ? '' : ' is-active'}`,
       type: 'button',
       title: config.sidebar === 'hidden' ? '显示小组件' : '隐藏小组件',
+      'aria-label': config.sidebar === 'hidden' ? '显示小组件' : '隐藏小组件',
+      'aria-pressed': config.sidebar === 'hidden' ? 'false' : 'true',
       html: svgIcon('sidebar', 17),
       onclick: () => {
         if (config.sidebar === 'hidden') {
@@ -119,6 +128,7 @@ function renderTopbar() {
       class: 'icon-btn glass',
       type: 'button',
       title: '设置 (Ctrl+,)',
+      'aria-label': '打开设置',
       html: svgIcon('settings', 17),
       onclick: () => bus.emit('openSettings', {}),
     })

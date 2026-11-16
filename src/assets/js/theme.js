@@ -11,20 +11,40 @@ import { clamp } from './util.js';
 const STYLE_SHAPE = {
   glass: { radius: 1, blur: 1 },
   noir: { radius: 0.5, blur: 0 },
+  paper: { radius: 0.62, blur: 0 },
+  native: { radius: 1.1, blur: 0.85 },
   editorial: { radius: 0.34, blur: 0 },
   terminal: { radius: 0, blur: 0 },
 };
 
 /**
+ * 每套风格固定的明暗基调。null = 跟随壁纸自动判定。
+ * 「白纸」永远是浅色纸面，壁纸再黑也不该把文字翻成白色。
+ */
+const STYLE_TONE = {
+  paper: 'light',
+  editorial: 'light',
+  terminal: 'dark',
+  noir: 'dark',
+  native: null,
+  glass: null,
+};
+
+export const styleTone = (id) => STYLE_TONE[id] ?? null;
+
+/**
  * 网格总宽：设置页与首屏共用同一套算法，避免两处算出的数字对不上。
  * 与 --cell / --grid-gap 的定义保持一致。
  */
+export function cellSize(iconSize) {
+  return Math.round(iconSize + Math.max(16, iconSize * 0.2));
+}
+
 export function dockWidth(layout = {}) {
   const iconSize = clamp(layout.iconSize ?? 60, 40, 96);
   const columns = clamp(layout.columns ?? 6, 3, 14);
   const gap = clamp(layout.gap ?? 20, 4, 48);
-  const cell = Math.round(iconSize + Math.max(22, iconSize * 0.38));
-  return Math.round(columns * cell + (columns - 1) * (gap * 0.55));
+  return Math.round(columns * cellSize(iconSize) + (columns - 1) * gap);
 }
 
 export function applyConfig(state) {
@@ -55,7 +75,7 @@ export function applyConfig(state) {
   const iconSize = clamp(layout.iconSize ?? 60, 40, 96);
   const columns = clamp(layout.columns ?? 6, 3, 14);
   const gap = clamp(layout.gap ?? 20, 4, 48);
-  const cell = Math.round(iconSize + Math.max(22, iconSize * 0.38));
+  const cell = cellSize(iconSize);
   style.setProperty('--icon-size', `${iconSize}px`);
   style.setProperty('--grid-gap', `${gap}px`);
   style.setProperty('--grid-cols', String(columns));

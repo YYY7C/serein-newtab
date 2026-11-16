@@ -144,6 +144,37 @@ html[data-perf='1'] .menu {
   -webkit-backdrop-filter: none !important;
 }
 
+/* 省电模式：壁纸的缓慢漂移动画常驻合成，是最该关掉的一项 */
+html[data-perf='1'] .bg-media.is-slow {
+  animation: none !important;
+}
+
+/* 跟随系统的「减少动态效果」：和设置里的关闭动效等价，但不写入配置 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.001ms !important;
+  }
+  .bg-media.is-slow {
+    animation: none !important;
+  }
+}
+
+/* 键盘焦点：深色壁纸与纸面背景上都要看得见 */
+.icon-btn:focus-visible,
+.card-action:focus-visible,
+.engine-btn:focus-visible,
+.search-submit:focus-visible,
+.todo-add button:focus-visible,
+.weather-city:focus-visible,
+.color-dot:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 82%, #ffffff);
+  outline-offset: 2px;
+}
+
 html[data-anim='0'] *,
 html[data-anim='0'] *::before,
 html[data-anim='0'] *::after {

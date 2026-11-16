@@ -237,7 +237,7 @@ function buildAppearance() {
         },
         h('span', {
           class: `style-thumb is-${preset.form}`,
-          style: { background: preset.thumb, color: preset.id === 'editorial' ? '#191713' : '#ffffff' },
+          style: { background: preset.thumb, color: preset.tone === 'light' ? '#191713' : '#ffffff' },
         }),
         h(
           'div',

@@ -7,7 +7,7 @@ import { uid } from './util.js';
 export const APP = {
   name: 'Lumen',
   subtitle: '新标签页',
-  version: '1.0.0',
+  version: '1.1.0',
   schema: 1,
 };
 
@@ -119,7 +119,7 @@ export const gradientById = (id) => GRADIENTS.find((g) => g.id === id) || GRADIE
 /* ------------------------------------------------------------- 视觉风格 */
 
 /**
- * 四套表层语言。切风格会同时切换推荐强调色，之后仍可单独改。
+ * 六套表层语言。切风格会同时切换推荐强调色，之后仍可单独改。
  * thumb 用于设置页的迷你预览。
  */
 export const STYLES = [
@@ -140,6 +140,24 @@ export const STYLES = [
     accent: '#7c8cff',
     thumb: 'linear-gradient(180deg, #17191d 0%, #101215 100%)',
     tone: 'dark',
+  },
+  {
+    id: 'paper',
+    name: '白纸',
+    form: 'grid',
+    desc: '暗色材质的纸面版：暖白底、发丝线、纸纹颗粒，数字改用衬线。',
+    accent: '#b4552d',
+    thumb: 'linear-gradient(180deg, #fdfbf6 0%, #eae4d8 100%)',
+    tone: 'light',
+  },
+  {
+    id: 'native',
+    name: '原色',
+    form: 'grid',
+    desc: '壁纸按原样铺满，图标还原品牌色，文字对比随壁纸自动切换。',
+    accent: '#3e7bfa',
+    thumb: 'linear-gradient(140deg, #8fb6c8 0%, #4d7264 46%, #16241f 100%)',
+    tone: 'auto',
   },
   {
     id: 'editorial',

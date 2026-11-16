@@ -9,6 +9,7 @@
 import { $ } from './util.js';
 import { files, trackObjectUrl, revokeObjectUrl } from './storage.js';
 import { gradientById } from './defaults.js';
+import { styleTone } from './theme.js';
 
 const BING_API = 'https://cn.bing.com/HPImageArchive.aspx?format=js&idx=%IDX%&n=1&mkt=zh-CN';
 const BING_CDN = 'https://cn.bing.com';
@@ -85,8 +86,8 @@ function setImage(src, cover = true) {
   if (cover) mediaEl.classList.add('is-slow');
 }
 
-/** 背景遮罩下限：列表型/材质型风格需要压住壁纸，保证表面干净 */
-const STYLE_VEIL = { glass: 0, noir: 0.8, editorial: 0.93, terminal: 0.94 };
+/** 背景遮罩下限：列表型/材质型风格需要压住壁纸，保证表面干净；原色风格则完全不压 */
+const STYLE_VEIL = { glass: 0, native: 0, noir: 0.8, paper: 0.93, editorial: 0.93, terminal: 0.94 };
 
 function applyFilters(bg) {
   const filters = [];
@@ -263,11 +264,24 @@ async function sampleImageTone(url) {
 async function applyTone(bg, known) {
   const token = ++toneObserverToken;
   const root = document.documentElement;
+
+  // 用户手动锁定的色调优先级最高
+  if (bg.tone === 'dark' || bg.tone === 'light') {
+    root.dataset.tone = bg.tone;
+    return;
+  }
+
+  // 纸面/终端这类「固定明暗」的风格不采样壁纸：
+  // 既省掉一次离屏 canvas 解码，也避免首屏色调跳变。
+  const forced = styleTone(root.dataset.style || 'glass');
+  if (forced) {
+    root.dataset.tone = forced;
+    return;
+  }
+
   let tone = known;
 
-  if (bg.tone === 'dark' || bg.tone === 'light') {
-    tone = bg.tone;
-  } else if (!tone) {
+  if (!tone) {
     // 图片类：尝试采样
     const match = /url\("?(.*?)"?\)/.exec(mediaEl.style.backgroundImage || '');
     if (match && match[1]) tone = await sampleImageTone(match[1]);
