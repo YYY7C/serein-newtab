@@ -33,8 +33,11 @@ function showToast({ text, error = false, action = null }) {
         type: 'button',
         text: action.label || '撤销',
         onclick: () => {
-          action.onClick?.();
-          node.remove();
+          try {
+            action.onClick?.();
+          } finally {
+            node.remove();
+          }
         },
       })
     );
@@ -43,6 +46,7 @@ function showToast({ text, error = false, action = null }) {
   const life = action ? 6000 : 2200;
   setTimeout(() => {
     if (!node.isConnected) return;
+    node.inert = true;
     node.classList.add('is-leaving');
     setTimeout(() => node.remove(), 260);
   }, life);
@@ -75,15 +79,36 @@ document.addEventListener('lumen:open-settings', () => openSettings());
 /* --------------------------------------------------------------- 顶栏 */
 
 let topbarSignature = '';
+let settingsButton = null;
+
+function getSettingsButton() {
+  if (!settingsButton) {
+    settingsButton = h('button', {
+      class: 'icon-btn glass',
+      type: 'button',
+      'data-action': 'settings',
+      title: '设置 (Ctrl+,)',
+      'aria-label': '打开设置',
+      html: svgIcon('settings', 17),
+      onclick: () => bus.emit('openSettings', {}),
+    });
+  }
+  return settingsButton;
+}
 
 function renderTopbar() {
   const config = store.state.config;
+  const widgets = config.widgets;
+  const hasWidgets = Boolean(
+    config.layout.showWeather || widgets.todo || widgets.notes || widgets.bookmarks || widgets.topSites
+  );
   const right = $('#topbar-right');
   if (!right) return;
   // 拖设置里的滑块会高频 commit('config')：顶栏只跟这几个字段有关，别每次都重建 DOM
-  const signature = `${config.background.type}|${config.sidebar}`;
+  const signature = `${config.background.type}|${config.sidebar}|${hasWidgets ? '1' : '0'}`;
   if (signature === topbarSignature) return;
   topbarSignature = signature;
+  const focusedAction = right.contains(document.activeElement) ? document.activeElement.dataset.action || null : null;
   clear(right);
 
   if (config.background.type === 'bing') {
@@ -91,6 +116,7 @@ function renderTopbar() {
       h('button', {
         class: 'icon-btn glass',
         type: 'button',
+        'data-action': 'bing',
         title: '换一张壁纸',
         'aria-label': '换一张壁纸',
         html: svgIcon('image', 17),
@@ -103,36 +129,39 @@ function renderTopbar() {
     );
   }
 
-  right.appendChild(
-    h('button', {
-      class: `icon-btn glass${config.sidebar === 'hidden' ? '' : ' is-active'}`,
-      type: 'button',
-      title: config.sidebar === 'hidden' ? '显示小组件' : '隐藏小组件',
-      'aria-label': config.sidebar === 'hidden' ? '显示小组件' : '隐藏小组件',
-      'aria-pressed': config.sidebar === 'hidden' ? 'false' : 'true',
-      html: svgIcon('sidebar', 17),
-      onclick: () => {
-        if (config.sidebar === 'hidden') {
-          config.sidebar = config.lastSidebar || 'right';
-        } else {
-          config.lastSidebar = config.sidebar;
-          config.sidebar = 'hidden';
-        }
-        store.commit('config');
-      },
-    })
-  );
+  if (hasWidgets) {
+    right.appendChild(
+      h('button', {
+        class: `icon-btn glass${config.sidebar === 'hidden' ? '' : ' is-active'}`,
+        type: 'button',
+        'data-action': 'sidebar',
+        title: config.sidebar === 'hidden' ? '显示小组件' : '隐藏小组件',
+        'aria-label': '小组件',
+        'aria-pressed': config.sidebar === 'hidden' ? 'false' : 'true',
+        html: svgIcon('sidebar', 17),
+        onclick: () => {
+          // 直接读 store.state.config：导入/重置/镜像恢复会整体替换 config 对象，
+          // 闭包里捕获的旧对象会导致按钮点了没反应。
+          const current = store.state.config;
+          if (current.sidebar === 'hidden') {
+            current.sidebar = current.lastSidebar || 'right';
+          } else {
+            current.lastSidebar = current.sidebar;
+            current.sidebar = 'hidden';
+          }
+          store.commit('config');
+        },
+      })
+    );
+  }
 
-  right.appendChild(
-    h('button', {
-      class: 'icon-btn glass',
-      type: 'button',
-      title: '设置 (Ctrl+,)',
-      'aria-label': '打开设置',
-      html: svgIcon('settings', 17),
-      onclick: () => bus.emit('openSettings', {}),
-    })
-  );
+  // 顶栏其它按钮可能因壁纸/小组件变化重建，但设置按钮保持同一个节点：
+  // 设置面板关闭时要能把焦点还给真正的触发按钮，而不是一个已被替换的旧节点。
+  right.appendChild(getSettingsButton());
+
+  if (focusedAction) {
+    right.querySelector(`[data-action="${focusedAction}"]`)?.focus({ preventScroll: true });
+  }
 }
 
 /* --------------------------------------------------------------- 启动 */
@@ -152,17 +181,18 @@ function boot() {
     if (scope === 'config' || scope === 'all') {
       applyConfig(store.state);
       renderTopbar();
+    } else if (scope === 'storage-error') {
+      showToast({ text: '本地存储写入失败，请检查剩余空间', error: true });
     }
   });
 
   // 壁纸相关字段变动时重绘背景（设置页里已经直接调用，这里兜住其他入口）
-  document.addEventListener('lumen:reapply-wallpaper', () => applyBackground(store.state));
-
   requestPersistentStorage();
 
   // localStorage 被清空后，用 chrome.storage.local 的镜像把配置找回来
-  store.restoreFromMirror().then((restored) => {
+  store.restoreFromMirror().then(async (restored) => {
     if (!restored) return;
+    await applyBackground(store.state);
     refreshClock();
     showToast({ text: '检测到本地缓存被清理，已从镜像恢复你的配置' });
   });

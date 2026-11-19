@@ -59,8 +59,19 @@ export function mirrorToChrome(state, force = false) {
 
 export function readChromeMirror() {
   return new Promise((resolve) => {
+    const local = globalThis.chrome?.storage?.local;
+    if (!local?.get) {
+      resolve(null);
+      return;
+    }
     try {
-      chrome?.storage?.local?.get?.(MIRROR_KEY, (result) => resolve(result?.[MIRROR_KEY] || null));
+      local.get(MIRROR_KEY, (result) => {
+        if (globalThis.chrome?.runtime?.lastError) {
+          resolve(null);
+          return;
+        }
+        resolve(result?.[MIRROR_KEY] || null);
+      });
     } catch {
       resolve(null);
     }
@@ -85,23 +96,48 @@ let dbPromise = null;
 
 function openDb() {
   if (dbPromise) return dbPromise;
-  dbPromise = new Promise((resolve) => {
+  const promise = new Promise((resolve) => {
     let request;
+    let settled = false;
+    const fail = () => {
+      if (settled) return;
+      settled = true;
+      resolve(null);
+    };
     try {
       request = indexedDB.open(DB_NAME, DB_VERSION);
     } catch {
-      resolve(null);
+      fail();
       return;
     }
     request.onupgradeneeded = () => {
       const db = request.result;
       if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
     };
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => {
+      const db = request.result;
+      if (settled) {
+        // onblocked 已经让本次调用失败；迟到的成功连接直接关掉，别泄漏
+        db.close();
+        return;
+      }
+      settled = true;
+      db.onversionchange = () => {
+        db.close();
+        dbPromise = null;
+      };
+      resolve(db);
+    };
     request.onerror = () => {
       console.warn('[lumen/storage] IndexedDB 不可用', request.error);
-      resolve(null);
+      fail();
     };
+    request.onblocked = () => fail();
+  });
+  dbPromise = promise;
+  // 失败后允许下一次调用重试：onblocked/临时错误过去后数据库往往还能打开
+  promise.then((db) => {
+    if (!db && dbPromise === promise) dbPromise = null;
   });
   return dbPromise;
 }
@@ -118,20 +154,41 @@ function tx(mode, run) {
         try {
           transaction = db.transaction(STORE, mode);
         } catch {
+          // 连接可能已被浏览器关闭（休眠恢复/内存回收），下次调用重新打开
+          dbPromise = null;
           resolve(null);
           return;
         }
         const store = transaction.objectStore(STORE);
         let result = null;
+        let settled = false;
+        const finish = (value) => {
+          if (settled) return;
+          settled = true;
+          resolve(value);
+        };
         try {
           const request = run(store);
-          if (request) request.onsuccess = () => { result = request.result; };
+          if (request) {
+            request.onsuccess = () => {
+              result = request.result;
+            };
+            request.onerror = () => finish(null);
+          }
         } catch (err) {
           console.warn('[lumen/storage] 事务失败', err);
+          finish(null);
+          try {
+            transaction.abort();
+          } catch {
+            /* 忽略 */
+          }
+          return;
         }
-        transaction.oncomplete = () => resolve(result ?? null);
-        transaction.onerror = () => resolve(result ?? null);
-        transaction.onabort = () => resolve(result ?? null);
+        transaction.oncomplete = () => finish(result ?? null);
+        // 事务被中止时，即便请求已经拿到结果也不能当成写入成功
+        transaction.onerror = () => finish(null);
+        transaction.onabort = () => finish(null);
       })
   );
 }

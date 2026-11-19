@@ -9,6 +9,7 @@ import { setWeather } from './store.js';
 const FORECAST_URL = 'https://api.open-meteo.com/v1/forecast';
 const GEO_URL = 'https://geocoding-api.open-meteo.com/v1/search';
 const CACHE_MS = 20 * 60 * 1000;
+let requestToken = 0;
 
 /* ------------------------------------------------------------- 天气代码 */
 
@@ -43,12 +44,14 @@ const WMO = {
   99: ['强雷暴伴冰雹', 'thunder'],
 };
 
+const weatherEntry = (code) => (Object.hasOwn(WMO, code) ? WMO[code] : null);
+
 export function weatherLabel(code) {
-  return (WMO[code] || ['未知', 'cloudy'])[0];
+  return (weatherEntry(code) || ['未知', 'cloudy'])[0];
 }
 
 export function weatherKind(code) {
-  return (WMO[code] || ['未知', 'cloudy'])[1];
+  return (weatherEntry(code) || ['未知', 'cloudy'])[1];
 }
 
 /* --------------------------------------------------------------- 图标 */
@@ -144,12 +147,20 @@ export function weatherIconInline(code, isDay = true, size = 22) {
 
 export async function refreshWeather(state, { force = false } = {}) {
   const weather = state.weather;
-  if (!weather.lat || !weather.lon) return null;
+  const lat = Number(weather.lat);
+  const lon = Number(weather.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
+  // 命中缓存时不要递增 token：否则会把正在进行中的手动刷新结果作废
   if (!force && weather.cache && Date.now() - weather.updatedAt < CACHE_MS) return weather.cache;
+  const token = ++requestToken;
+  const stillCurrent = () =>
+    token === requestToken &&
+    Number(state.weather.lat) === lat &&
+    Number(state.weather.lon) === lon;
 
   const params = new URLSearchParams({
-    latitude: String(weather.lat),
-    longitude: String(weather.lon),
+    latitude: String(lat),
+    longitude: String(lon),
     current: 'temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,wind_speed_10m',
     daily: 'weather_code,temperature_2m_max,temperature_2m_min',
     timezone: 'auto',
@@ -160,6 +171,7 @@ export async function refreshWeather(state, { force = false } = {}) {
     const response = await fetch(`${FORECAST_URL}?${params.toString()}`, { credentials: 'omit' });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
+    if (!stillCurrent()) return state.weather.cache || null;
 
     const cache = {
       temp: Math.round(data.current?.temperature_2m ?? 0),
@@ -168,11 +180,15 @@ export async function refreshWeather(state, { force = false } = {}) {
       wind: Math.round(data.current?.wind_speed_10m ?? 0),
       code: data.current?.weather_code ?? 0,
       isDay: data.current?.is_day !== 0,
-      days: (data.daily?.time || []).map((iso, index) => ({
+      days: (Array.isArray(data.daily?.time) ? data.daily.time : []).map((iso, index) => ({
         iso,
-        code: data.daily.weather_code?.[index] ?? 0,
-        max: Math.round(data.daily.temperature_2m_max?.[index] ?? 0),
-        min: Math.round(data.daily.temperature_2m_min?.[index] ?? 0),
+        code: Array.isArray(data.daily?.weather_code) ? data.daily.weather_code[index] ?? 0 : 0,
+        max: Math.round(
+          (Array.isArray(data.daily?.temperature_2m_max) ? data.daily.temperature_2m_max[index] : 0) ?? 0
+        ),
+        min: Math.round(
+          (Array.isArray(data.daily?.temperature_2m_min) ? data.daily.temperature_2m_min[index] : 0) ?? 0
+        ),
       })),
     };
 
@@ -180,8 +196,8 @@ export async function refreshWeather(state, { force = false } = {}) {
     return cache;
   } catch (err) {
     console.warn('[lumen/weather] 获取失败', err);
-    setWeather({ error: String(err.message || err) });
-    return weather.cache || null;
+    if (stillCurrent()) setWeather({ error: String(err.message || err).slice(0, 200) });
+    return state.weather.cache || null;
   }
 }
 
@@ -200,12 +216,21 @@ export async function searchCity(query) {
     const response = await fetch(`${GEO_URL}?${params.toString()}`, { credentials: 'omit' });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
-    return (data.results || []).map((row) => ({
-      name: row.name,
-      region: [row.admin1, row.country].filter(Boolean).join(' · '),
-      lat: row.latitude,
-      lon: row.longitude,
-    }));
+    return (Array.isArray(data.results) ? data.results : [])
+      .map((row) => {
+        if (!row || typeof row.name !== 'string' || !row.name.trim()) return null;
+        const lat = Number(row.latitude);
+        const lon = Number(row.longitude);
+        if (!Number.isFinite(lat) || lat < -90 || lat > 90) return null;
+        if (!Number.isFinite(lon) || lon < -180 || lon > 180) return null;
+        return {
+          name: row.name.trim().slice(0, 40),
+          region: [row.admin1, row.country].filter((part) => typeof part === 'string' && part).join(' · ').slice(0, 80),
+          lat,
+          lon,
+        };
+      })
+      .filter(Boolean);
   } catch (err) {
     console.warn('[lumen/weather] 城市搜索失败', err);
     return [];

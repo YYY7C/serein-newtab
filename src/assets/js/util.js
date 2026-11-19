@@ -32,7 +32,12 @@ export function h(tag, attrs, ...children) {
       if (key === 'class' || key === 'className') node.className = value;
       else if (key === 'html') node.innerHTML = value;
       else if (key === 'text') node.textContent = value;
-      else if (key === 'style' && typeof value === 'object') Object.assign(node.style, value);
+      else if (key === 'style' && typeof value === 'object') {
+        for (const [prop, val] of Object.entries(value)) {
+          if (prop.startsWith('--')) node.style.setProperty(prop, val);
+          else node.style[prop] = val;
+        }
+      }
       else if (key === 'dataset' && typeof value === 'object') Object.assign(node.dataset, value);
       else if (key.startsWith('on') && typeof value === 'function') {
         node.addEventListener(key.slice(2).toLowerCase(), value);
@@ -125,25 +130,78 @@ export function escapeHtml(input) {
 }
 
 const SCHEME_RE = /^[a-z][a-z0-9+.-]*:/i;
-const HOSTLIKE_RE = /^[\w-]+(\.[\w-]+)+([/?#:].*)?$/;
+// 冒号后必须是端口数字：否则 `com.app://custom` 会被误当成域名补成 https。
+// 允许 Unicode 标签，中文域名也能被补全为 https。
+const HOSTLIKE_RE = /^[\p{L}\p{M}\p{N}_-]+(?:\.[\p{L}\p{M}\p{N}_-]+)+(?:[/?#].*|:\d+.*)?$/u;
 const LOCALHOST_RE = /^(localhost|127\.0\.0\.1)(:\d+)?(\/.*)?$/i;
 
 /** 把用户输入补全成可用 URL；无法识别时原样返回（例如 chrome:// 或 javascript:） */
 export function normalizeUrl(input) {
   let raw = String(input ?? '').trim();
   if (!raw) return '';
-  // localhost:3000 会被误判为 scheme，必须先处理
+  // localhost:3000 会被误判为 scheme，必须先处理；
+  // example.com:8080 同理（点号在 scheme 字符集里，不能只看冒号）。
   if (LOCALHOST_RE.test(raw)) return 'http://' + raw;
-  if (raw.startsWith('//')) return 'https:' + raw;
-  if (SCHEME_RE.test(raw)) return raw;
+  if (raw.startsWith('//')) return raw.length > 2 ? 'https:' + raw : '';
   if (HOSTLIKE_RE.test(raw)) return 'https://' + raw;
+  if (SCHEME_RE.test(raw)) return raw;
   return raw;
 }
 
 export function isSafeUrl(url) {
-  const value = normalizeUrl(url).toLowerCase();
+  // 浏览器会忽略 URL 协议里的制表符/换行符，做安全检查前先同样剥掉，
+  // 否则 `java\nscript:` 能绕过前缀匹配。
+  const normalized = normalizeUrl(url);
+  const value = normalized.toLowerCase().replace(/[\u0000-\u0020\u007f]+/g, '');
   if (!value) return false;
-  return !/^(javascript|data|vbscript|file):/.test(value);
+  if (/^(javascript|data|vbscript|file):/.test(value)) return false;
+  // http(s) 必须是 // 形式并能解析出主机名；`https:`、`https://` 或含空格的残片都不算
+  if (/^https?:/.test(value)) {
+    if (!/^https?:\/\//.test(value)) return false;
+    try {
+      return Boolean(new URL(normalized).hostname);
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** 快捷方式地址：安全且具备可导航形状（协议或可补全的域名），不接受「随便一句话」 */
+export function isUsableUrl(input) {
+  const url = normalizeUrl(input);
+  if (!url || !isSafeUrl(url)) return false;
+  const match = SCHEME_RE.exec(url);
+  if (!match) return false;
+  // `example.com:abc` / `localhost:abc` 会被 SCHEME_RE 误当成自定义协议；
+  // 真正带点号的自定义协议只接受显式的 scheme:// 形式。
+  const scheme = match[0].slice(0, -1).toLowerCase();
+  if ((scheme === 'localhost' || scheme.includes('.')) && !/^[a-z][a-z0-9+.-]*:\/\//i.test(url)) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * 图片地址：壁纸/自定义图标只接受 http(s) 与 data:image。
+ * 不允许 data:text/html、file: 或带控制字符的地址进入 CSS。
+ */
+export function isSafeImageUrl(input) {
+  const value = String(input ?? '').trim();
+  if (!value) return false;
+  if (/[\u0000-\u001f\u007f]/.test(value)) return false;
+  if (/^data:/i.test(value)) {
+    return /^data:image\/[a-z0-9.+-]+(?:;[^,]*)?,/i.test(value);
+  }
+  const normalized = normalizeUrl(value);
+  // 允许扩展自身资源（图标编辑器的预览测试也走这个分支）；
+  // chrome-extension:// 页面资源只能被本扩展显式声明暴露，图片上下文不会执行脚本。
+  if (!/^(?:https?|chrome-extension):\/\//i.test(normalized)) return false;
+  try {
+    return Boolean(new URL(normalized).hostname);
+  } catch {
+    return false;
+  }
 }
 
 export function hostOf(url) {
@@ -174,6 +232,22 @@ export function hsl(hue, sat, light) {
   return `hsl(${hue} ${sat}% ${light}%)`;
 }
 
+/** HSL -> #rrggbb：图标兜底色要继续参与 shade()/亮度计算，必须是可解析的 hex */
+function hslToHex(hue, sat, light) {
+  const h = ((hue % 360) + 360) % 360;
+  const s = Math.min(100, Math.max(0, sat)) / 100;
+  const l = Math.min(100, Math.max(0, light)) / 100;
+  const a = s * Math.min(l, 1 - l);
+  const channel = (n) => {
+    const k = (n + h / 30) % 12;
+    const color = l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+    return Math.round(255 * color)
+      .toString(16)
+      .padStart(2, '0');
+  };
+  return `#${channel(0)}${channel(8)}${channel(4)}`;
+}
+
 /**
  * 用领域名推导一组和谐的品牌感配色。
  * 同一域名永远得到同一颜色，保证刷新后视觉稳定。
@@ -184,17 +258,25 @@ export function domainPalette(seed) {
   const hue2 = (hue + 26 + (hash % 18)) % 360;
   return {
     hue,
-    from: hsl(hue, 68, 58),
-    to: hsl(hue2, 72, 44),
-    solid: hsl(hue, 62, 50),
+    from: hslToHex(hue, 68, 58),
+    to: hslToHex(hue2, 72, 44),
+    solid: hslToHex(hue, 62, 50),
   };
 }
 
 export function hexToRgb(hex) {
-  const value = String(hex).replace('#', '');
-  const full = value.length === 3 ? value.split('').map((c) => c + c).join('') : value;
+  const value = String(hex).replace('#', '').trim();
+  // 支持 #RGB / #RGBA / #RRGGBB / #RRGGBBAA；alpha 不参与图标底色的明暗计算
+  const full =
+    value.length === 3 || value.length === 4
+      ? value
+          .slice(0, 3)
+          .split('')
+          .map((c) => c + c)
+          .join('')
+      : value.slice(0, 6);
+  if (!/^[0-9a-f]{6}$/i.test(full)) return { r: 128, g: 128, b: 128 };
   const num = Number.parseInt(full, 16);
-  if (Number.isNaN(num)) return { r: 128, g: 128, b: 128 };
   return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
 }
 

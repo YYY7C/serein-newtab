@@ -17,6 +17,8 @@ export const BRAND_LOGOS = {
   'zhihu.com': 'zhihu',
   'weibo.com': 'sinaweibo',
   'weibo.cn': 'sinaweibo',
+  'weixin.qq.com': 'wechat',
+  'wechat.com': 'wechat',
   'taobao.com': 'taobao',
   'tmall.com': 'taobao',
   'jd.com': 'jd',

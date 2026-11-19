@@ -15,10 +15,20 @@ try {
       const root = document.documentElement;
       if (config.style) root.dataset.style = config.style;
       if (config.sidebar) root.dataset.sidebar = config.sidebar;
+      root.dataset.perf = config.performance ? '1' : '0';
+      root.dataset.anim = config.animations === false ? '0' : '1';
       // 与 theme.js 的 STYLE_TONE 保持一致；此处必须独立，不能 import
       const tone = { paper: 'light', editorial: 'light', terminal: 'dark', noir: 'dark' }[config.style];
       if (tone) root.dataset.tone = tone;
       if (config.accent) root.style.setProperty('--accent', config.accent);
+      const scale = Number(config.fontScale);
+      if (Number.isFinite(scale) && scale > 0) {
+        const fitted = Math.min(1.4, Math.max(0.8, scale));
+        if (fitted !== 1) {
+          root.style.setProperty('--font-scale', String(fitted));
+          root.dataset.scale = '1';
+        }
+      }
     }
   }
 } catch (err) {

@@ -9,7 +9,7 @@
  * 徽标不是妥协——它是「图片加载失败/离线」时的确定性美学保底。
  */
 
-import { domainPalette, hostOf, normalizeUrl, hashString, hexToRgb } from './util.js';
+import { domainPalette, hostOf, normalizeUrl, hashString, hexToRgb, isSafeImageUrl } from './util.js';
 import { brandLogoUrl, brandSlugFor } from './brands.js';
 
 /* ------------------------------------------------------------ 品牌配色 */
@@ -86,6 +86,7 @@ const BRAND = {
   'mail.qq.com': ['#1296DB', '邮'],
   'qq.com': ['#1296DB', 'Q'],
   'weixin.qq.com': ['#07C160', '微'],
+  'wechat.com': ['#07C160', '微'],
   'mp.weixin.qq.com': ['#07C160', '公'],
   'wjx.cn': ['#4A90E2', '卷'],
   'juejin.cn': ['#1E80FF', '掘'],
@@ -153,6 +154,20 @@ function matchBrand(host) {
 
 /* --------------------------------------------------------------- 对比色 */
 
+const graphemeSegmenter =
+  typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function'
+    ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+    : null;
+
+function firstGrapheme(text) {
+  const value = String(text ?? '');
+  if (graphemeSegmenter) {
+    for (const part of graphemeSegmenter.segment(value)) return part.segment;
+    return '';
+  }
+  return Array.from(value)[0] || '';
+}
+
 function relativeLuminance(hex) {
   const { r, g, b } = hexToRgb(hex);
   const channel = (value) => {
@@ -181,9 +196,10 @@ function initialsOf(title, host) {
     if (/^[\u4e00-\u9fa5]/.test(text)) return text.slice(0, 1);
     const latin = text.match(/[A-Za-z0-9]+/);
     if (latin) return latin[0].slice(0, 2);
-    return text.slice(0, 1);
+    // 不能用 slice 切 UTF-16：emoji 标题会被截成半个代理项/半个 ZWJ 序列
+    return firstGrapheme(text);
   }
-  return (host || '?').slice(0, 1).toUpperCase();
+  return (Array.from(host || '?')[0] || '?').toUpperCase();
 }
 
 /* ------------------------------------------------------------- favicon */
@@ -244,9 +260,19 @@ export function resolveIcon(shortcut, { useFavicon = true, iconStyle = 'brand' }
     brand: false,
   };
 
-  if (type === 'emoji' && value) return { ...fallback, text: value, from: 'transparent', to: 'transparent', fg: '', emoji: true };
-  if (type === 'text' && value) return { ...fallback, text: value.slice(0, 4) };
-  if (type === 'url' && value) return { ...fallback, src: value };
+  if (type === 'emoji' && value != null) {
+    // 表情是一个整体字形（旗帜、肤色、ZWJ 家庭都不能拆），只显示第一个 grapheme
+    const emoji = firstGrapheme(String(value).trim());
+    if (emoji) return { ...fallback, text: emoji, from: 'transparent', to: 'transparent', fg: '', emoji: true };
+  }
+  if (type === 'text' && value != null) {
+    const text = Array.from(String(value).trim()).slice(0, 4).join('');
+    if (text) return { ...fallback, text };
+  }
+  if (type === 'url' && value) {
+    const src = normalizeUrl(value);
+    return isSafeImageUrl(src) ? { ...fallback, src } : fallback;
+  }
   if (type === 'file' && value) return { ...fallback, src: null, pendingFileId: value };
   if (type === 'favicon') return { ...fallback, src: useFavicon ? faviconUrl(url) : null };
 
@@ -261,10 +287,36 @@ export function resolveIcon(shortcut, { useFavicon = true, iconStyle = 'brand' }
 
 /** 上传图标走 IndexedDB，需要异步取 Blob 再转成 objectURL */
 export async function loadFileIcon(fileId) {
-  const { files, trackObjectUrl } = await import('./storage.js');
-  const blob = await files.get(`icon:${fileId}`);
-  if (!blob) return null;
-  return trackObjectUrl(URL.createObjectURL(blob));
+  try {
+    const { files, trackObjectUrl } = await import('./storage.js');
+    const blob = await files.get(`icon:${fileId}`);
+    if (!(blob instanceof Blob)) return null;
+    return trackObjectUrl(URL.createObjectURL(blob));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 列表/联想等小尺寸预览用：同一文件只解码一次。
+ * 这些 URL 生命周期与本页相同，不随弹窗关闭回收，避免列表反复刷新时泄漏。
+ */
+const previewFileIconCache = new Map();
+
+export function previewFileIcon(fileId) {
+  if (!previewFileIconCache.has(fileId)) {
+    const promise = loadFileIcon(fileId)
+      .then((url) => {
+        if (!url) previewFileIconCache.delete(fileId);
+        return url;
+      })
+      .catch(() => {
+        previewFileIconCache.delete(fileId);
+        return null;
+      });
+    previewFileIconCache.set(fileId, promise);
+  }
+  return previewFileIconCache.get(fileId);
 }
 
 /** 给缩略图预览用：返回一个稳定的小尺寸 favicon 地址 */

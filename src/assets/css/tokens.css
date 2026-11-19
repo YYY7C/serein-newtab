@@ -34,15 +34,15 @@ html {
   --radius-md: 18px;
   --radius-lg: 24px;
   --radius-xl: 30px;
-  --icon-size: 60px;
-  --grid-gap: 20px;
+  --icon-size: 72px;
+  --grid-gap: 28px;
   --grid-cols: 6;
-  --cell: 86px;
+  --cell: 88px;
   --font-scale: 1;
 
   /* 内容列宽：搜索框、图标网格、列表型风格共用同一列，保证左边缘对齐。
      JS 会按「列数 × 单元宽 + 间隙」算出真实值。 */
-  --dock-w: 571px;
+  --dock-w: 668px;
   --list-w: clamp(420px, var(--dock-w), 780px);
   /* 搜索框与图标网格同宽，但保留 420px 下限：列数调小时不至于窄到没法用 */
   --search-w: min(clamp(420px, var(--dock-w), 100%), 100%);
@@ -58,7 +58,9 @@ html {
   --icon-tint: 0.28;
   --sidebar-w: 312px;
 
-  font-size: calc(16px * var(--font-scale));
+  /* 界面缩放由 theme.js 落到 .stage 的 transform，这里保持固定基准字号，
+     否则 em 单位会跟着再缩放一次，变成双重放大。 */
+  font-size: 16px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-size-adjust: 100%;
@@ -139,7 +141,11 @@ html[data-perf='1'] {
 html[data-perf='1'] .glass,
 html[data-perf='1'] .tile-icon,
 html[data-perf='1'] .panel,
-html[data-perf='1'] .menu {
+html[data-perf='1'] .menu,
+html[data-perf='1'] .search,
+html[data-perf='1'] .suggest,
+html[data-perf='1'] .card,
+html[data-perf='1'] .scrim {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
@@ -178,17 +184,17 @@ html[data-perf='1'] .bg-media.is-slow {
 html[data-anim='0'] *,
 html[data-anim='0'] *::before,
 html[data-anim='0'] *::after {
-  animation-duration: 0.001ms !important;
-  animation-delay: 0ms !important;
-  transition-duration: 0.001ms !important;
+  animation: none !important;
+  transition: none !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
-    animation-duration: 0.001ms !important;
+    animation: none !important;
     transition-duration: 0.001ms !important;
+    transition-delay: 0s !important;
   }
 }
 

@@ -42,7 +42,7 @@ export function cellSize(iconSize) {
 
 export function dockWidth(layout = {}) {
   const iconSize = clamp(layout.iconSize ?? 60, 40, 96);
-  const columns = clamp(layout.columns ?? 6, 3, 14);
+  const columns = Math.round(clamp(layout.columns ?? 6, 3, 14));
   const gap = clamp(layout.gap ?? 20, 4, 48);
   return Math.round(columns * cellSize(iconSize) + (columns - 1) * gap);
 }
@@ -73,7 +73,7 @@ export function applyConfig(state) {
   /* 网格 */
   const layout = config.layout;
   const iconSize = clamp(layout.iconSize ?? 60, 40, 96);
-  const columns = clamp(layout.columns ?? 6, 3, 14);
+  const columns = Math.round(clamp(layout.columns ?? 6, 3, 14));
   const gap = clamp(layout.gap ?? 20, 4, 48);
   const cell = cellSize(iconSize);
   style.setProperty('--icon-size', `${iconSize}px`);
@@ -81,7 +81,10 @@ export function applyConfig(state) {
   style.setProperty('--grid-cols', String(columns));
   style.setProperty('--cell', `${cell}px`);
   style.setProperty('--dock-w', `${dockWidth(layout)}px`);
-  style.setProperty('--font-scale', String(clamp(config.fontScale ?? 1, 0.8, 1.4)));
+  const fontScale = clamp(config.fontScale ?? 1, 0.8, 1.4);
+  style.setProperty('--font-scale', String(fontScale));
+  // 只有非 1 时才给 stage 加 transform，避免默认状态下多一层合成层
+  root.dataset.scale = fontScale === 1 ? '0' : '1';
 
   /* 行为开关 */
   root.dataset.perf = config.performance ? '1' : '0';

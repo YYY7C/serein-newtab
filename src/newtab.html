@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN" data-tone="dark" data-perf="0" data-anim="1" data-sidebar="right">
+<html lang="zh-CN" data-tone="dark" data-style="noir" data-perf="0" data-anim="1" data-sidebar="right">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -46,7 +46,14 @@
 
           <div class="search-wrap" id="search-wrap">
             <form class="search" id="search-form" autocomplete="off" role="search">
-              <button type="button" class="engine-btn" id="engine-btn" title="切换搜索引擎"></button>
+              <button
+                type="button"
+                class="engine-btn"
+                id="engine-btn"
+                title="切换搜索引擎"
+                aria-haspopup="menu"
+                aria-expanded="false"
+              ></button>
               <input
                 class="search-input"
                 id="search-input"
@@ -55,11 +62,13 @@
                 spellcheck="false"
                 autocomplete="off"
                 autocapitalize="off"
+                maxlength="400"
                 aria-label="搜索"
+                aria-haspopup="listbox"
               />
               <button type="submit" class="search-submit" id="search-submit" aria-label="搜索"></button>
             </form>
-            <div class="suggest" id="suggest" role="listbox"></div>
+            <div class="suggest" id="suggest" role="listbox" aria-label="搜索建议"></div>
             <div class="search-hint" id="search-hint"></div>
           </div>
 

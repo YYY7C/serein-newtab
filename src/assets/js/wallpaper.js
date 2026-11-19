@@ -6,10 +6,11 @@
  *   3. 自动判定文字色调（tone），让浅色壁纸上也能看清
  */
 
-import { $ } from './util.js';
+import { $, normalizeUrl, isSafeImageUrl } from './util.js';
 import { files, trackObjectUrl, revokeObjectUrl } from './storage.js';
 import { gradientById } from './defaults.js';
 import { styleTone } from './theme.js';
+import * as store from './store.js';
 
 const BING_API = 'https://cn.bing.com/HPImageArchive.aspx?format=js&idx=%IDX%&n=1&mkt=zh-CN';
 const BING_CDN = 'https://cn.bing.com';
@@ -18,6 +19,10 @@ let mediaEl;
 let veilEl;
 let vignetteEl;
 let currentObjectUrl = null;
+let currentFileId = null;
+let currentImageSrc = '';
+let backgroundToken = 0;
+const toneCache = new Map();
 
 export function initBackground(store) {
   mediaEl = $('#bg-media');
@@ -26,11 +31,27 @@ export function initBackground(store) {
   return applyBackground(store.state);
 }
 
+function releaseCurrentFile() {
+  if (currentObjectUrl) {
+    toneCache.delete(currentObjectUrl);
+    revokeObjectUrl(currentObjectUrl);
+  }
+  currentObjectUrl = null;
+  currentFileId = null;
+  currentImageSrc = '';
+}
+
 /* --------------------------------------------------------------- 应用 */
 
 export async function applyBackground(state) {
   const bg = state.config.background;
+  const token = ++backgroundToken;
+  const fallbackCss = gradientById(bg.gradient).css;
   let layer = null;
+  // 固定明暗的风格/手动色调不用等图片/接口，先把文字色切过去
+  setForcedTone(bg);
+
+  if (bg.type !== 'file') releaseCurrentFile();
 
   switch (bg.type) {
     case 'color': {
@@ -38,6 +59,7 @@ export async function applyBackground(state) {
       mediaEl.style.backgroundColor = bg.color || '#0a1024';
       mediaEl.classList.remove('is-slow');
       mediaEl.classList.add('is-ready');
+      currentImageSrc = '';
       layer = { tone: luminanceTone(bg.color), kind: 'color' };
       break;
     }
@@ -47,70 +69,126 @@ export async function applyBackground(state) {
       mediaEl.style.backgroundColor = 'transparent';
       mediaEl.classList.remove('is-slow');
       mediaEl.classList.add('is-ready');
+      currentImageSrc = '';
       layer = { tone: preset.tone, kind: 'gradient' };
       break;
     }
     case 'bing': {
-      layer = await applyBing(bg);
+      // 本地壁纸刚被释放/首次打开时先铺渐变，别让网络请求期间只剩底色
+      if (!currentImageSrc) setGradientFallback(bg);
+      layer = await applyBing(bg, token, fallbackCss);
+      if (token !== backgroundToken) return;
       break;
     }
     case 'url': {
-      if (bg.url) {
-        setImage(bg.url, true);
+      const src = bg.url ? normalizeUrl(bg.url) : '';
+      if (src && isSafeImageUrl(src)) {
+        setImage(src, true, fallbackCss);
         layer = { tone: null, kind: 'image' };
+      } else {
+        layer = setGradientFallback(bg);
       }
       break;
     }
     case 'file': {
-      layer = await applyLocalFile(bg.fileId);
+      if (!bg.fileId) {
+        releaseCurrentFile();
+        layer = setGradientFallback(bg);
+      } else {
+        layer = await applyLocalFile(bg.fileId, token, fallbackCss);
+        if (token !== backgroundToken) return;
+        if (!layer) layer = setGradientFallback(bg);
+      }
       break;
     }
     default:
+      layer = setGradientFallback(bg);
       break;
   }
 
   applyFilters(bg);
   applyTone(bg, layer?.tone ?? null);
+  applyVignette(bg);
+}
 
-  if (state.config.background.vignette) vignetteEl.classList.add('is-on');
+/**
+ * 只改滤镜/暗角，不重新解析壁纸来源。
+ * 拖亮度/模糊滑块时不应重复请求必应接口或重新读 IndexedDB 里的本地壁纸。
+ */
+export function applyBackgroundLook(state) {
+  const bg = state.config.background;
+  applyFilters(bg);
+  applyVignette(bg);
+}
+
+function applyVignette(bg) {
+  if (bg.vignette) vignetteEl.classList.add('is-on');
   else vignetteEl.classList.remove('is-on');
 }
 
-function setImage(src, cover = true) {
+function setImage(src, cover = true, fallbackCss = '') {
   if (!src) return;
   mediaEl.style.backgroundColor = 'transparent';
-  mediaEl.style.backgroundImage = `url("${String(src).replace(/"/g, '%22')}")`;
+  if (src !== currentImageSrc) {
+    currentImageSrc = src;
+    const escaped = String(src).replace(/\\/g, '\\\\').replace(/"/g, '%22');
+    mediaEl.style.backgroundImage = `url("${escaped}")${fallbackCss ? `, ${fallbackCss}` : ''}`;
+    // 只有真正换图才强制一次样式计算；调亮度/模糊时不再触发同步布局
+    void mediaEl.offsetWidth;
+    mediaEl.classList.add('is-ready');
+  }
   mediaEl.style.backgroundSize = 'cover';
-  void mediaEl.offsetWidth;
-  mediaEl.classList.add('is-ready');
   if (cover) mediaEl.classList.add('is-slow');
+  else mediaEl.classList.remove('is-slow');
 }
 
-/** 背景遮罩下限：列表型/材质型风格需要压住壁纸，保证表面干净；原色风格则完全不压 */
-const STYLE_VEIL = { glass: 0, native: 0, noir: 0.8, paper: 0.93, editorial: 0.93, terminal: 0.94 };
+/** 图片类来源缺失/失败时，退回当前渐变预设，而不是留在上一张壁纸上 */
+function setGradientFallback(bg) {
+  const preset = gradientById(bg.gradient);
+  mediaEl.style.backgroundImage = preset.css;
+  mediaEl.style.backgroundColor = 'transparent';
+  mediaEl.classList.remove('is-slow');
+  mediaEl.classList.add('is-ready');
+  currentImageSrc = '';
+  return { tone: preset.tone, kind: 'gradient', fallback: true };
+}
+
+/** 背景遮罩下限：列表型/材质型风格需要压住壁纸，保证表面干净；原色风格则完全不压
+ *  白纸保留约 1/4 的壁纸，压成一层暖灰纸纹，而不是把所有图片都洗成一片白。 */
+const STYLE_VEIL = { glass: 0, native: 0, noir: 0.8, paper: 0.75, editorial: 0.93, terminal: 0.94 };
+
+/** 透出来的壁纸还要褪色：白纸上是「印在纸上的照片」，不是彩色幻灯片 */
+const STYLE_SATURATE = { paper: 0.45 };
 
 function applyFilters(bg) {
+  const style = document.documentElement.dataset.style || 'glass';
+  const baseSaturate = Number.isFinite(Number(bg.saturate)) ? Number(bg.saturate) : 100;
+  const saturate = Math.max(0, baseSaturate) * (STYLE_SATURATE[style] ?? 1);
+
   const filters = [];
   if (bg.blur > 0) filters.push(`blur(${bg.blur}px)`);
   filters.push(`brightness(${bg.brightness}%)`);
-  filters.push(`saturate(${bg.saturate}%)`);
+  filters.push(`saturate(${Math.round(saturate)}%)`);
   mediaEl.style.filter = filters.join(' ');
   mediaEl.style.transform = bg.blur > 0 ? 'scale(1.09)' : '';
 
-  const style = document.documentElement.dataset.style || 'glass';
   const floor = STYLE_VEIL[style] ?? 0;
   veilEl.style.opacity = String(Math.max(Math.max(0, bg.veil) / 100, floor));
 }
 
 /* ------------------------------------------------------------------ 必应 */
 
-async function applyBing(bg) {
-  const today = new Date().toISOString().slice(0, 10);
+async function applyBing(bg, token, fallbackCss = '') {
+  // 必须用本地日期：必应按用户所在时区换图，UTC 日期会在每天 0–8 点间误判
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
+    now.getDate()
+  ).padStart(2, '0')}`;
   const cached = bg.bing || {};
 
   // 同一天、同一 idx，直接复用
   if (cached.url && cached.date === today && cached.idx === (bg.bing?.idx ?? 0)) {
-    setImage(cached.url);
+    setImage(cached.url, true, fallbackCss);
     return { tone: null, kind: 'image' };
   }
 
@@ -121,29 +199,34 @@ async function applyBing(bg) {
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
+    if (token !== backgroundToken) return null;
     const image = data?.images?.[0];
-    if (!image?.urlbase) throw new Error('响应缺少 urlbase');
+    if (!image || typeof image.urlbase !== 'string' || !image.urlbase) throw new Error('响应缺少 urlbase');
 
     const url = `${BING_CDN}${image.urlbase}_1920x1080.jpg`;
-    setImage(url);
+    setImage(url, true, fallbackCss);
 
     // 写回缓存（不触发整体 commit，避免循环）
     bg.bing = {
       idx: bg.bing?.idx ?? 0,
       date: today,
       url,
-      copyright: image.copyright || '',
-      title: image.title || '',
+      copyright: typeof image.copyright === 'string' ? image.copyright.slice(0, 200) : '',
+      title: typeof image.title === 'string' ? image.title.slice(0, 200) : '',
     };
+    // 把当日地址写回状态，避免每次打开新标签页都重新请求同一个接口。
+    // 只落盘不广播：壁纸缓存变化不需要重建任何视图。
+    store.persist();
     return { tone: null, kind: 'image' };
   } catch (err) {
-    console.warn('[lumen/bg] 必应壁纸获取失败，回落渐变', err);
-    const preset = gradientById(bg.gradient || 'aurora');
-    mediaEl.style.backgroundImage = preset.css;
-    mediaEl.style.backgroundColor = 'transparent';
-    mediaEl.classList.remove('is-slow');
-    mediaEl.classList.add('is-ready');
-    return { tone: preset.tone, kind: 'gradient', fallback: true };
+    if (token !== backgroundToken) return null;
+    console.warn('[lumen/bg] 必应壁纸获取失败，回落缓存或渐变', err);
+    // 离线/接口故障时优先显示昨天缓存的图；图片本身失败时仍有渐变兜底
+    if (cached.url) {
+      setImage(cached.url, true, fallbackCss);
+      return { tone: null, kind: 'image' };
+    }
+    return setGradientFallback(bg);
   }
 }
 
@@ -159,8 +242,13 @@ export async function cycleBing(state, delta = 1) {
 /**
  * 最近 N 天的必应壁纸（idx 0 = 今天，往回数）。
  * 缩略图用 _400x240.jpg 变体，一张约 30 KB。
+ * 设置页反复进出时复用同一次请求，避免重复拉取 8 张缩略图。
  */
+let galleryCache = null;
+let galleryCachedAt = 0;
+
 export async function fetchBingGallery(count = 8) {
+  if (galleryCache && Date.now() - galleryCachedAt < 10 * 60 * 1000) return galleryCache;
   const response = await fetch(
     `https://cn.bing.com/HPImageArchive.aspx?format=js&idx=0&n=${count}&mkt=zh-CN`,
     { credentials: 'omit', cache: 'no-store' }
@@ -168,35 +256,61 @@ export async function fetchBingGallery(count = 8) {
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const data = await response.json();
   const images = Array.isArray(data?.images) ? data.images : [];
-  return images.map((image, idx) => {
-    const raw = String(image.fullstartdate || '');
-    const date = raw.length === 8 ? `${Number(raw.slice(4, 6))}/${Number(raw.slice(6, 8))}` : '';
-    return {
-      idx,
-      url: `${BING_CDN}${image.urlbase}_1920x1080.jpg`,
-      thumb: `${BING_CDN}${image.urlbase}_400x240.jpg`,
-      copyright: image.copyright || '',
-      title: image.title || '',
-      date,
-    };
-  });
+  const list = images
+    .map((image, idx) => {
+      if (!image || typeof image.urlbase !== 'string' || !image.urlbase) return null;
+      const raw = String(image.fullstartdate || '');
+      const date = raw.length === 8 ? `${Number(raw.slice(4, 6))}/${Number(raw.slice(6, 8))}` : '';
+      return {
+        idx,
+        url: `${BING_CDN}${image.urlbase}_1920x1080.jpg`,
+        thumb: `${BING_CDN}${image.urlbase}_400x240.jpg`,
+        copyright: typeof image.copyright === 'string' ? image.copyright : '',
+        title: typeof image.title === 'string' ? image.title : '',
+        date,
+      };
+    })
+    .filter(Boolean);
+  galleryCache = list;
+  galleryCachedAt = Date.now();
+  return list;
 }
 
 /* ------------------------------------------------------------------ 本地 */
 
-async function applyLocalFile(fileId) {
-  if (!fileId) return null;
-  const blob = await files.get(`wallpaper:${fileId}`);
-  if (!blob) return null;
-  if (currentObjectUrl) revokeObjectUrl(currentObjectUrl);
+async function applyLocalFile(fileId, token, fallbackCss = '') {
+  if (!fileId) {
+    releaseCurrentFile();
+    return null;
+  }
+  if (fileId === currentFileId && currentObjectUrl) {
+    setImage(currentObjectUrl, true, fallbackCss);
+    return { tone: null, kind: 'image' };
+  }
+
+  let blob;
+  try {
+    blob = await files.get(`wallpaper:${fileId}`);
+  } catch {
+    blob = null;
+  }
+  if (token !== backgroundToken) return null;
+  if (!(blob instanceof Blob)) {
+    releaseCurrentFile();
+    return null;
+  }
+
+  releaseCurrentFile();
+  currentFileId = fileId;
   currentObjectUrl = trackObjectUrl(URL.createObjectURL(blob));
-  setImage(currentObjectUrl);
+  setImage(currentObjectUrl, true, fallbackCss);
   return { tone: null, kind: 'image' };
 }
 
 export async function saveLocalWallpaper(file) {
-  const id = `w${Date.now().toString(36)}`;
-  await files.put(`wallpaper:${id}`, file);
+  const id = `w${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  const result = await files.put(`wallpaper:${id}`, file);
+  if (!result) throw new Error('壁纸保存失败');
   return id;
 }
 
@@ -207,11 +321,25 @@ export async function dropLocalWallpaper(fileId) {
 /* ------------------------------------------------------------------ 色调 */
 
 function luminanceTone(color) {
-  const hex = String(color).replace('#', '');
-  if (hex.length !== 6) return 'dark';
-  const r = parseInt(hex.slice(0, 2), 16) / 255;
-  const g = parseInt(hex.slice(2, 4), 16) / 255;
-  const b = parseInt(hex.slice(4, 6), 16) / 255;
+  const raw = String(color || '').trim();
+  let r;
+  let g;
+  let b;
+  if (raw.startsWith('#')) {
+    let hex = raw.slice(1);
+    if (hex.length === 3 || hex.length === 4) hex = hex.slice(0, 3).split('').map((c) => c + c).join('');
+    if (hex.length === 8) hex = hex.slice(0, 6);
+    if (!/^[0-9a-f]{6}$/i.test(hex)) return 'dark';
+    r = parseInt(hex.slice(0, 2), 16) / 255;
+    g = parseInt(hex.slice(2, 4), 16) / 255;
+    b = parseInt(hex.slice(4, 6), 16) / 255;
+  } else {
+    const match = /^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/i.exec(raw);
+    if (!match) return 'dark';
+    r = Number(match[1]) / 255;
+    g = Number(match[2]) / 255;
+    b = Number(match[3]) / 255;
+  }
   const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
   return lum > 0.55 ? 'light' : 'dark';
 }
@@ -230,7 +358,13 @@ async function sampleImageTone(url) {
   return new Promise((resolve) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    const timer = setTimeout(() => resolve(null), 2500);
+    const timer = setTimeout(() => {
+      // 超时后取消这次离屏解码/请求，别让它在后台继续占带宽和内存
+      img.onload = null;
+      img.onerror = null;
+      img.src = '';
+      resolve(null);
+    }, 2500);
     img.onload = () => {
       clearTimeout(timer);
       try {
@@ -261,37 +395,56 @@ async function sampleImageTone(url) {
   });
 }
 
-async function applyTone(bg, known) {
-  const token = ++toneObserverToken;
+function setForcedTone(bg) {
   const root = document.documentElement;
-
   // 用户手动锁定的色调优先级最高
   if (bg.tone === 'dark' || bg.tone === 'light') {
     root.dataset.tone = bg.tone;
-    return;
+    return true;
   }
-
   // 纸面/终端这类「固定明暗」的风格不采样壁纸：
   // 既省掉一次离屏 canvas 解码，也避免首屏色调跳变。
   const forced = styleTone(root.dataset.style || 'glass');
   if (forced) {
     root.dataset.tone = forced;
-    return;
+    return true;
   }
+  return false;
+}
+
+async function applyTone(bg, known) {
+  const token = ++toneObserverToken;
+  const root = document.documentElement;
+  if (setForcedTone(bg)) return;
 
   let tone = known;
 
   if (!tone) {
-    // 图片类：尝试采样
-    const match = /url\("?(.*?)"?\)/.exec(mediaEl.style.backgroundImage || '');
-    if (match && match[1]) tone = await sampleImageTone(match[1]);
+    // 图片类：尝试采样（同一张图只解码一次）。直接使用记录下来的 src，
+    // 不再从 style.backgroundImage 反解析（URL 里带引号/括号时会解析错）。
+    const src = currentImageSrc;
+    if (src) {
+      if (toneCache.has(src)) {
+        tone = toneCache.get(src);
+      } else {
+        tone = await sampleImageTone(src);
+        if (tone) {
+          if (toneCache.size > 16) toneCache.delete(toneCache.keys().next().value);
+          toneCache.set(src, tone);
+        }
+      }
+    }
     if (token !== toneObserverToken) return;
   }
 
   if (!tone) {
-    // 采样失败：优先跟随系统主题猜测
+    // 采样失败：优先跟随系统主题猜测；纯色背景则用背景色计算。
+    // 图片层会把 backgroundColor 设为 transparent，不能拿它当有效颜色。
     tone = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-    if (mediaEl.style.backgroundColor) tone = luminanceTone(mediaEl.style.backgroundColor);
+    const color = mediaEl.style.backgroundColor;
+    if (color && color !== 'transparent' && !/^rgba?\(.*,\s*0\)$/.test(color)) {
+      tone = luminanceTone(color);
+    }
   }
 
   root.dataset.tone = tone;

@@ -85,6 +85,15 @@ html[data-tone='light'] .bg-vignette {
   transition: opacity 0.28s var(--ease), filter 0.28s var(--ease);
 }
 
+/* 界面缩放：对主舞台做变换，再反向补偿尺寸，等价于真正放大/缩小整块界面。
+   背景、设置面板、菜单与弹窗留在视口坐标系里，避免 fixed 定位被缩放后跑出屏幕。 */
+html[data-scale='1'] .stage {
+  width: calc(100% / var(--font-scale));
+  height: calc(100dvh / var(--font-scale));
+  transform: scale(var(--font-scale));
+  transform-origin: top left;
+}
+
 .main {
   position: relative;
   flex: 1 1 auto;
@@ -99,6 +108,8 @@ html[data-tone='light'] .bg-vignette {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  /* 内容高于视口时 safe center 会退化为从顶部开始，避免顶部被裁掉且滚不到 */
+  justify-content: safe center;
   gap: clamp(20px, 3.2vh, 40px);
   padding: 84px clamp(20px, 4vw, 64px) clamp(28px, 4vh, 56px);
   overflow-y: auto;
@@ -593,6 +604,7 @@ html[data-tone='light'] .clock {
 }
 
 .suggest-thumb {
+  position: relative;
   width: 20px;
   height: 20px;
   border-radius: 6px;
@@ -606,6 +618,8 @@ html[data-tone='light'] .clock {
 }
 
 .suggest-thumb img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: contain;
@@ -632,6 +646,10 @@ html[data-tone='light'] .clock {
   font-size: 11px;
   color: var(--fg-3);
   flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .search-hint {
@@ -767,7 +785,8 @@ html[data-tone='light'] .clock {
   /* CJK 字形重心略偏下，微调一点让字符看起来是正中 */
   padding-bottom: 0.02em;
   font-family: var(--font-sans);
-  font-size: calc(var(--icon-size) * 0.43);
+  /* 单字 43%，写满 4 个字时由 JS 收到约 22%，始终落在图标内 */
+  font-size: calc(var(--icon-size) * var(--mono-scale, 0.43));
   font-weight: 600;
   line-height: 1;
   letter-spacing: 0;
@@ -952,10 +971,17 @@ html[data-tone='light'] .clock {
 }
 
 .folder-mini img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: contain;
   padding: 14%;
+}
+
+.folder-mini img.is-cover {
+  padding: 0;
+  object-fit: cover;
 }
 
 .folder-mini .empty {
@@ -974,25 +1000,31 @@ html[data-tone='light'] .clock {
   border-radius: 28%;
 }
 
-.folder-badge {
+/* 文字列表里 drop 指示线改为横线；否则会被列表的序号 ::before 覆盖 */
+html[data-style='editorial'] .grid > .tile.drop-before::before,
+html[data-style='terminal'] .grid > .tile.drop-before::before,
+html[data-style='editorial'] .grid > .tile.drop-after::before,
+html[data-style='terminal'] .grid > .tile.drop-after::before {
+  content: '';
   position: absolute;
-  top: -4px;
-  left: 50%;
-  transform: translateX(calc(var(--icon-size) / 2 - 9px));
-  min-width: 17px;
-  height: 17px;
-  padding: 0 4px;
-  border-radius: 9px;
-  display: grid;
-  place-items: center;
-  font-size: 9.5px;
-  font-weight: 700;
-  color: #fff;
-  background: color-mix(in srgb, var(--accent) 90%, black 10%);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.34);
-  border: 1.5px solid color-mix(in srgb, var(--glass-border) 40%, transparent);
-  pointer-events: none;
-  z-index: 2;
+  left: 0;
+  right: 0;
+  width: auto;
+  height: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+
+html[data-style='editorial'] .grid > .tile.drop-before::before,
+html[data-style='terminal'] .grid > .tile.drop-before::before {
+  top: -1px;
+  bottom: auto;
+}
+
+html[data-style='editorial'] .grid > .tile.drop-after::before,
+html[data-style='terminal'] .grid > .tile.drop-after::before {
+  top: auto;
+  bottom: -1px;
 }
 
 /* -------------------------------------------------------------- 拖拽态 */
@@ -1484,6 +1516,7 @@ html[data-tone='light'] .clock {
 }
 
 .link-fav {
+  position: relative;
   width: 16px;
   height: 16px;
   border-radius: 4px;
@@ -1497,6 +1530,8 @@ html[data-tone='light'] .clock {
 }
 
 .link-fav img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: contain;

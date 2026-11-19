@@ -207,16 +207,18 @@ html[data-style='noir'] .tile-label {
 }
 
 html[data-style='noir'] .folder-mini > span {
-  background: color-mix(in srgb, var(--c1) 34%, #101216);
+  background: color-mix(in srgb, var(--c1, #4b5a80) 34%, #101216);
   border-radius: 27%;
   color: #fff;
 }
 
-html[data-style='noir'] .folder-badge {
-  background: var(--surface-2);
-  border: 1px solid var(--hair-strong);
-  color: var(--fg-1);
-  box-shadow: none;
+html[data-style='noir'] .folder-mini > span.empty {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+}
+
+html[data-style='noir'] .folder-mini > span.is-brand {
+  background: #f4f5f7;
 }
 
 /* ---- 排版：更克制 ---- */
@@ -304,9 +306,10 @@ html[data-style='paper'] {
     'Noto Serif SC', Georgia, serif;
 }
 
-/* 壁纸只作为纸纹存在：降饱和 + 一层暖白遮罩，靠 JS 的 STYLE_VEIL 拉高到 0.88 */
+/* 壁纸作为暖灰纸纹存在：遮罩压到 75%，JS 再把 .bg-media 褪色到 45%，
+   仍能看清画面轮廓 */
 /* 不要对整个 .bg 去饱和：那会把遮罩层的暖色一起洗成中性灰。
-   纸面的暖意来自 --veil-rgb，壁纸只透出 7%。 */
+   纸面的暖意来自 --veil-rgb，壁纸透出约 1/4。 */
 html[data-style='paper'] .bg {
   filter: contrast(0.97) brightness(1.02);
 }
@@ -403,11 +406,6 @@ html[data-style='paper'] .folder-mini > span {
 
 html[data-style='paper'] .folder-mini .empty {
   background: #ffffff;
-}
-
-html[data-style='paper'] .folder-badge {
-  box-shadow: 0 1px 4px rgba(60, 50, 30, 0.24);
-  border-color: #fff;
 }
 
 /* ---- 排版：字标与数字 ---- */
@@ -981,6 +979,12 @@ html[data-style='editorial'] .tile::after {
   white-space: nowrap;
 }
 
+/* 文件夹与「添加」没有域名；不要让空的 ::after 仍占一段右侧内边距 */
+html[data-style='editorial'] .tile[data-kind='group']::after,
+html[data-style='editorial'] .tile[data-kind='add']::after {
+  content: none;
+}
+
 html[data-style='editorial'] .tile:hover {
   background: rgba(25, 23, 19, 0.035);
   padding-left: 12px;
@@ -1082,10 +1086,6 @@ html[data-style='editorial'] .folder-mini > span {
   border-radius: 1px;
   font-size: 0;
   color: transparent;
-}
-
-html[data-style='editorial'] .folder-badge {
-  display: none;
 }
 
 html[data-style='editorial'] .tile--add {
@@ -1568,6 +1568,11 @@ html[data-style='terminal'] .tile::after {
   white-space: nowrap;
 }
 
+html[data-style='terminal'] .tile[data-kind='group']::after,
+html[data-style='terminal'] .tile[data-kind='add']::after {
+  content: none;
+}
+
 html[data-style='terminal'] .tile:hover {
   background: rgba(126, 231, 135, 0.06);
 }
@@ -1683,10 +1688,6 @@ html[data-style='terminal'] .folder-mini > span {
   border-radius: 0;
   font-size: 0;
   color: transparent;
-}
-
-html[data-style='terminal'] .folder-badge {
-  display: none;
 }
 
 html[data-style='terminal'] .tile--add {

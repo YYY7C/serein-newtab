@@ -5,17 +5,22 @@
  * 这里的引擎只决定「本页提交后跳到哪个地址」。
  */
 
-import { $, h, clear, svgIcon, debounce, normalizeUrl, bus, hostOf } from './util.js';
+import { $, h, clear, svgIcon, debounce, normalizeUrl, isSafeUrl, bus, hostOf } from './util.js';
 import { ENGINES, engineById } from './defaults.js';
 import * as store from './store.js';
-import { openMenu } from './menu.js';
-import { resolveIcon, brandSlugFor, brandLogoUrl } from './icons.js';
+import { openMenu, closeMenu, isMenuOpen } from './menu.js';
+import { resolveIcon, brandSlugFor, brandLogoUrl, previewFileIcon } from './icons.js';
 
 let els = null;
 let rows = [];
 let activeIndex = -1;
 let abortController = null;
 let latestQuery = '';
+let paintedEngineId = '';
+let hintBuilt = false;
+let blurTimer = 0;
+let suggestSeq = 0;
+let suggestEpoch = 0;
 
 const IS_MAC = /mac|iphone|ipad/i.test(navigator.platform || navigator.userAgent);
 
@@ -85,12 +90,20 @@ function matchCommands(query) {
 function looksLikeUrl(text) {
   const value = text.trim();
   if (!value || /\s/.test(value)) return false;
+  if (!isSafeUrl(normalizeUrl(value))) return false;
+  // 带 // 的协议或明确的外部协议；普通的 word:word 仍当搜索词
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) return true;
+  if (/^(mailto|tel|magnet):/i.test(value)) return isSafeUrl(normalizeUrl(value));
   if (/^(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(value)) return true;
   if (/^\d{1,3}(\.\d{1,3}){3}(:\d+)?(\/|$)/.test(value)) return true;
-  if (/^[^\s/]+\.[a-z]{2,}(\/.*)?$/i.test(value)) return true;
-  // 中文域名 / 带端口
-  if (/^[^\s/]+\.[a-z]{2,}:\d+/.test(value)) return true;
+  if (/^[^\s/]+\.[\p{L}][\p{L}\p{N}-]{1,}(?:[/?#].*|:\d+.*)?$/u.test(value)) {
+    // example..com 或未补全的邮箱不该生成一个打不开的网址行
+    try {
+      return Boolean(new URL(normalizeUrl(value)).hostname);
+    } catch {
+      return false;
+    }
+  }
   return false;
 }
 
@@ -108,6 +121,11 @@ export function initSearch() {
   };
 
   els.submit.innerHTML = svgIcon('search', 19);
+  els.suggest.inert = true;
+  els.input.setAttribute('role', 'combobox');
+  els.input.setAttribute('aria-autocomplete', 'list');
+  els.input.setAttribute('aria-controls', 'suggest');
+  els.input.setAttribute('aria-expanded', 'false');
   paintEngine();
   paintHint();
 
@@ -115,17 +133,32 @@ export function initSearch() {
 
   els.form.addEventListener('submit', (event) => {
     event.preventDefault();
-    commitCurrent();
+    // 点搜索按钮 = 搜索输入框里的原文，不沿用鼠标悬停/方向键选中的联想项
+    submitQuery();
   });
 
   els.input.addEventListener('input', onInput);
-  els.input.addEventListener('focus', () => els.wrap.classList.add('is-focused'));
+  els.input.addEventListener('focus', () => {
+    clearTimeout(blurTimer);
+    els.wrap.classList.add('is-focused');
+  });
   els.input.addEventListener('blur', () => {
     els.wrap.classList.remove('is-focused');
-    setTimeout(closeSuggest, 120);
+    clearTimeout(blurTimer);
+    blurTimer = setTimeout(closeSuggest, 120);
   });
 
   els.input.addEventListener('keydown', onKeydown);
+
+  // 联想项点击时不要让输入框先失焦：否则 blur 定时器会关掉列表，慢一点点击就点不中。
+  els.suggest.addEventListener('mousedown', (event) => {
+    clearTimeout(blurTimer);
+    if (event.target.closest?.('.suggest-item')) event.preventDefault();
+  });
+  // 点击搜索框以外的区域立刻收起；点击联想列表的滚动条时不会因失焦被误关。
+  document.addEventListener('mousedown', (event) => {
+    if (!els.wrap.contains(event.target) && !els.suggest.contains(event.target)) closeSuggest();
+  });
 
   els.engineBtn.addEventListener('click', (event) => {
     const rect = els.engineBtn.getBoundingClientRect();
@@ -138,8 +171,13 @@ export function initSearch() {
           paintEngine();
         },
       })),
-      { x: rect.left, y: rect.bottom + 8 }
+      {
+        x: rect.left,
+        y: rect.bottom + 8,
+        onClose: () => els.engineBtn.setAttribute('aria-expanded', 'false'),
+      }
     );
+    els.engineBtn.setAttribute('aria-expanded', 'true');
     event.stopPropagation();
   });
 
@@ -147,8 +185,18 @@ export function initSearch() {
 
   store.subscribe((scope) => {
     if (scope === 'config' || scope === 'all') {
+      const config = store.state.config;
+      // 引擎/可见性变化时，旧引擎的迟到联想结果不能再弹回来
+      if (paintedEngineId && config.search.engine !== paintedEngineId) closeSuggest();
+      const visible = config.layout.showSearch !== false;
+      if (!visible && els.wrap.contains(document.activeElement)) {
+        closeSuggest();
+        els.input.blur();
+      }
+      els.wrap.hidden = !visible;
       paintEngine();
-      els.wrap.hidden = store.state.config.layout.showSearch === false;
+      paintHint();
+      if (!config.search.suggestions && els.suggest.classList.contains('is-open')) closeSuggest();
     }
   });
 }
@@ -156,13 +204,27 @@ export function initSearch() {
 function paintEngine() {
   if (!els) return;
   const engine = engineById(store.state.config.search.engine);
+  if (paintedEngineId === engine.id && els.engineBtn.childElementCount) return;
+  paintedEngineId = engine.id;
   clear(els.engineBtn);
   const slug = brandSlugFor(hostOf(engine.url));
   const badge = h('span', {
     class: `engine-badge${engine.letter.length > 2 ? ' is-compact' : ''}${slug ? ' is-brand' : ''}`,
+    'aria-hidden': 'true',
   });
   if (slug) {
-    badge.appendChild(h('img', { src: brandLogoUrl(slug), alt: '', decoding: 'async' }));
+    const img = h('img', { src: brandLogoUrl(slug), alt: '', decoding: 'async' });
+    img.addEventListener(
+      'error',
+      () => {
+        img.remove();
+        badge.classList.remove('is-brand');
+        badge.textContent = engine.letter;
+        badge.style.background = `linear-gradient(140deg, ${engine.color}, ${shade(engine.color, -0.22)})`;
+      },
+      { once: true }
+    );
+    badge.appendChild(img);
   } else {
     badge.textContent = engine.letter;
     badge.style.background = `linear-gradient(140deg, ${engine.color}, ${shade(engine.color, -0.22)})`;
@@ -170,6 +232,7 @@ function paintEngine() {
   els.engineBtn.appendChild(badge);
   els.engineBtn.appendChild(h('span', { text: engine.name }));
   els.engineBtn.appendChild(h('span', { html: svgIcon('chevron-down', 13), style: { opacity: '.55' } }));
+  els.engineBtn.setAttribute('aria-label', `切换搜索引擎，当前${engine.name}`);
 }
 
 function shade(hex, amount) {
@@ -182,11 +245,14 @@ function shade(hex, amount) {
 }
 
 function paintHint() {
-  const key = IS_MAC ? '⌘' : 'Ctrl';
-  els.hint.innerHTML =
-    `<span><kbd>${key}</kbd> + <kbd>K</kbd> 聚焦搜索</span>` +
-    `<span>输入「设置」「壁纸」直达命令</span>` +
-    `<span><kbd>?</kbd> 快捷键</span>`;
+  if (!hintBuilt) {
+    const key = IS_MAC ? '⌘' : 'Ctrl';
+    els.hint.innerHTML =
+      `<span><kbd>${key}</kbd> + <kbd>K</kbd> 聚焦搜索</span>` +
+      `<span>输入「设置」「壁纸」直达命令</span>` +
+      `<span><kbd>?</kbd> 快捷键</span>`;
+    hintBuilt = true;
+  }
   els.hint.hidden = store.state.config.layout.showHint === false;
 }
 
@@ -194,21 +260,27 @@ function paintHint() {
 
 const requestSuggest = debounce(async (query) => {
   const engine = engineById(store.state.config.search.engine);
-  if (!query || !engine.suggest || !store.state.config.search.suggestions) {
-    renderSuggestions();
-    return;
-  }
+  // 本地结果在 onInput 里已经画过。没有远程源时不要再重绘一次，
+  // 否则 170ms 后重建列表会把用户刚用方向键选中的行清掉。
+  if (!query || !engine.suggest || !store.state.config.search.suggestions) return;
 
   abortController?.abort();
   abortController = new AbortController();
+  const epoch = suggestEpoch;
 
   try {
     const list = await fetchSuggestions(engine.suggest, query, abortController.signal);
-    if (latestQuery !== query) return;
-    renderSuggestions(list);
+    if (latestQuery !== query || epoch !== suggestEpoch) return;
+    // 远程没有结果时保留 onInput 已经画好的本地列表，别重置键盘选中项
+    if (!list.length) return;
+    // 用户可能在 170ms 内已经用方向键选中了本地行：重绘后保留索引
+    renderSuggestions(list, { keepActive: activeIndex >= 0 });
   } catch (err) {
-    if (err.name !== 'AbortError') console.warn('[lumen/search] 联想失败', err);
-    renderSuggestions();
+    // 主动中止（改词/失焦/关闭）不应该再把旧结果画回来
+    if (err.name === 'AbortError') return;
+    if (latestQuery !== query || epoch !== suggestEpoch) return;
+    // 失败时保留已经渲染好的本地结果与当前选中项，不要无谓重绘
+    console.warn('[lumen/search] 联想失败', err);
   }
 }, 170);
 
@@ -223,10 +295,20 @@ function onInput() {
   }
 
   renderSuggestions();
+  if (looksLikeUrl(query)) {
+    // 已经识别成网址时不需要再把整条 URL 发给搜索联想接口
+    suggestEpoch += 1;
+    requestSuggest.cancel();
+    abortController?.abort();
+    abortController = null;
+    return;
+  }
   requestSuggest(query);
 }
 
 function onKeydown(event) {
+  // 中文输入法确认候选词时的 Enter / Escape 不能当成搜索操作
+  if (event.isComposing || event.keyCode === 229) return;
   if (event.key === 'ArrowDown') {
     event.preventDefault();
     moveActive(1);
@@ -245,21 +327,42 @@ function onKeydown(event) {
       els.input.blur();
     }
   } else if (event.key === 'Tab' && els.suggest.classList.contains('is-open')) {
+    // 联想列表打开时 Tab 不能把用户困在候选行里：收起列表，按自然方向
+    // 去搜索引擎按钮或搜索按钮，再按一次 Tab 就能离开搜索框。
     event.preventDefault();
-    moveActive(event.shiftKey ? -1 : 1);
+    closeSuggest();
+    const next = event.shiftKey ? els.engineBtn : els.submit;
+    if (next && next.getClientRects().length) {
+      next.focus({ preventScroll: true });
+    } else if (!event.shiftKey) {
+      // 文字列表风格隐藏了搜索按钮，Tab 的自然落点是第一个图标
+      document.querySelector('#grid .tile, #grid .tile--add')?.focus({ preventScroll: true });
+    }
   }
 }
 
 function moveActive(delta) {
   if (!rows.length) return;
-  activeIndex = (activeIndex + delta + rows.length + 1) % (rows.length + 1) - 1;
+  if (activeIndex < 0) {
+    // 还没选中任何一行时，↓ / Tab 从第一行开始，↑ / Shift+Tab 从最后一行开始
+    activeIndex = delta > 0 ? 0 : rows.length - 1;
+  } else {
+    activeIndex = (activeIndex + delta + rows.length) % rows.length;
+  }
   paintActive();
 }
 
 function paintActive() {
-  rows.forEach((row, index) => row.el.classList.toggle('is-active', index === activeIndex));
+  rows.forEach((row, index) => {
+    const active = index === activeIndex;
+    row.el.classList.toggle('is-active', active);
+    row.el.setAttribute('aria-selected', String(active));
+  });
   if (activeIndex >= 0 && rows[activeIndex]) {
+    els.input.setAttribute('aria-activedescendant', rows[activeIndex].el.id);
     rows[activeIndex].el.scrollIntoView({ block: 'nearest' });
+  } else {
+    els.input.removeAttribute('aria-activedescendant');
   }
 }
 
@@ -267,12 +370,18 @@ function paintActive() {
 
 function commitCurrent() {
   if (activeIndex >= 0 && rows[activeIndex]) {
-    rows[activeIndex].run();
+    const row = rows[activeIndex];
+    closeSuggest();
+    row.run();
     return;
   }
+  submitQuery();
+}
 
+function submitQuery() {
   const query = els.input.value.trim();
   if (!query) return;
+  closeSuggest();
   if (looksLikeUrl(query)) {
     navigate(normalizeUrl(query));
   } else {
@@ -281,8 +390,22 @@ function commitCurrent() {
 }
 
 function navigate(url) {
-  if (store.state.config.search.openInNewTab) window.open(url, '_blank', 'noopener');
-  else location.href = url;
+  if (!url || !isSafeUrl(url)) return;
+  if (store.state.config.search.openInNewTab) {
+    // noopener 会让 window.open 返回 null，不能据此回退当前页
+    const opened = window.open(url, '_blank');
+    if (opened) {
+      try {
+        opened.opener = null;
+      } catch {
+        /* 跨域窗口不允许写 opener 时忽略 */
+      }
+    } else {
+      location.href = url;
+    }
+  } else {
+    location.href = url;
+  }
 }
 
 function searchWith(query) {
@@ -299,7 +422,12 @@ function buildRow(config) {
       class: 'suggest-item',
       type: 'button',
       role: 'option',
-      onclick: () => config.run(),
+      id: `suggest-opt-${++suggestSeq}`,
+      'aria-selected': 'false',
+      onclick: () => {
+        closeSuggest();
+        config.run();
+      },
       onmouseenter: () => {
         const index = rows.findIndex((row) => row.el === el);
         activeIndex = index;
@@ -313,11 +441,20 @@ function buildRow(config) {
   return { el, run: config.run };
 }
 
-function renderSuggestions(remote = []) {
+function renderSuggestions(remote = [], { keepActive = false } = {}) {
+  // 输入框失焦（例如用户已经点去别处/打开菜单）后，迟到的联想结果不应再弹回来。
+  if (document.activeElement !== els.input) {
+    closeSuggest();
+    return;
+  }
   const query = els.input.value.trim();
+  const previousActive = keepActive ? activeIndex : -1;
   clear(els.suggest);
   rows = [];
-  activeIndex = -1;
+  if (!keepActive) {
+    activeIndex = -1;
+    els.input.removeAttribute('aria-activedescendant');
+  }
 
   if (!query) {
     closeSuggest();
@@ -360,40 +497,79 @@ function renderSuggestions(remote = []) {
     }
   }
 
-  // 3) 本地快捷方式
+  // 3) 本地快捷方式（包含文件夹里的条目）
   const lower = query.toLowerCase();
+  const groupTitles = new Map(store.state.groups.map((group) => [group.id, group.title]));
   const matches = store.state.shortcuts
-    .filter((item) => !item.groupId)
     .filter((item) => item.title.toLowerCase().includes(lower) || item.url.toLowerCase().includes(lower))
     .slice(0, 4);
 
   if (matches.length) {
-    els.suggest.appendChild(h('div', { class: 'suggest-group-label', text: '快捷方式' }));    for (const item of matches) {
+    els.suggest.appendChild(h('div', { class: 'suggest-group-label', text: '快捷方式' }));
+    for (const item of matches) {
       const descriptor = resolveIcon(item, { iconStyle: store.state.config.layout.iconStyle || 'brand' });
       const thumb = h('span', {
         class: `suggest-thumb${descriptor.brand ? ' is-brand' : ''}`,
         text: descriptor.brand ? '' : descriptor.text,
+        'aria-hidden': 'true',
       });
-      if (!descriptor.brand) thumb.style.background = `linear-gradient(145deg, ${descriptor.from}, ${descriptor.to})`;
-      if (descriptor.src) {
-        const img = h('img', { src: descriptor.src, alt: '', loading: 'lazy', decoding: 'async' });
+      if (!descriptor.brand) {
+        thumb.style.background = `linear-gradient(145deg, ${descriptor.from}, ${descriptor.to})`;
+        thumb.style.color = descriptor.fg;
+      }
+      if (descriptor.pendingFileId) {
+        previewFileIcon(descriptor.pendingFileId)
+          .then((url) => {
+            if (!url || !thumb.isConnected) return;
+            const img = h('img', { src: url, alt: '', decoding: 'async' });
+            img.addEventListener(
+              'load',
+              () => {
+                Array.from(thumb.childNodes).forEach((child) => {
+                  if (child !== img) child.remove();
+                });
+              },
+              { once: true }
+            );
+            img.addEventListener(
+              'error',
+              () => {
+                img.remove();
+                thumb.textContent = descriptor.text;
+              },
+              { once: true }
+            );
+            thumb.appendChild(img);
+          })
+          .catch(() => {});
+      } else if (descriptor.src) {
+        const img = h('img', { src: descriptor.src, alt: '', decoding: 'async' });
         img.addEventListener(
           'load',
           () => {
-            if (!descriptor.brand) {
-              thumb.textContent = '';
-              thumb.style.background = 'transparent';
-            }
-            thumb.appendChild(img);
+            Array.from(thumb.childNodes).forEach((child) => {
+              if (child !== img) child.remove();
+            });
           },
           { once: true }
         );
-        img.addEventListener('error', () => img.remove(), { once: true });
+        img.addEventListener(
+          'error',
+          () => {
+            img.remove();
+            thumb.classList.remove('is-brand');
+            thumb.style.background = `linear-gradient(145deg, ${descriptor.from}, ${descriptor.to})`;
+            thumb.style.color = descriptor.fg;
+            thumb.textContent = descriptor.text;
+          },
+          { once: true }
+        );
+        thumb.appendChild(img);
       }
       const row = buildRow({
         thumb,
         text: item.title,
-        hint: item.groupId ? '文件夹' : '',
+        hint: item.groupId ? groupTitles.get(item.groupId) || '文件夹' : '',
         run: () => navigate(item.url),
       });
       els.suggest.appendChild(row.el);
@@ -404,7 +580,10 @@ function renderSuggestions(remote = []) {
   // 3) 远程联想
   if (remote.length) {
     els.suggest.appendChild(h('div', { class: 'suggest-group-label', text: `${engine.name} 联想` }));
-    for (const text of remote.slice(0, 8)) {
+    for (const item of remote.slice(0, 8)) {
+      if (typeof item !== 'string') continue;
+      const text = item.trim().slice(0, 200);
+      if (!text) continue;
       const row = buildRow({
         icon: 'search',
         text,
@@ -428,10 +607,24 @@ function renderSuggestions(remote = []) {
   }
 
   els.suggest.classList.add('is-open');
+  els.suggest.inert = false;
+  els.input.setAttribute('aria-expanded', 'true');
+  if (previousActive >= 0 && rows.length) {
+    activeIndex = Math.min(previousActive, rows.length - 1);
+    paintActive();
+  }
 }
 
 function closeSuggest() {
+  suggestEpoch += 1;
+  requestSuggest.cancel();
+  abortController?.abort();
+  abortController = null;
   els.suggest?.classList.remove('is-open');
+  if (els.suggest) els.suggest.inert = true;
+  els.input?.setAttribute('aria-expanded', 'false');
+  els.input?.removeAttribute('aria-activedescendant');
+  rows = [];
   activeIndex = -1;
 }
 
@@ -506,17 +699,24 @@ const parse360 = extractQuotedArray;
 
 function globalHotkeys(event) {
   const isMeta = IS_MAC ? event.metaKey : event.ctrlKey;
+  const overlayOpen =
+    document.documentElement.dataset.overlay === 'settings' || Boolean(document.querySelector('.modal.is-open'));
 
   if (isMeta && event.key.toLowerCase() === 'k') {
     event.preventDefault();
-    focusSearch();
+    closeMenu();
+    if (!overlayOpen) focusSearch();
     return;
   }
   if (isMeta && event.key === ',') {
     event.preventDefault();
-    document.dispatchEvent(new CustomEvent('lumen:open-settings'));
+    closeMenu();
+    if (!document.querySelector('.modal.is-open') && document.documentElement.dataset.overlay !== 'settings') {
+      document.dispatchEvent(new CustomEvent('lumen:open-settings'));
+    }
     return;
   }
+  if (overlayOpen || isMenuOpen()) return;
   if (event.key === '/' && !isTypingTarget(event.target)) {
     event.preventDefault();
     focusSearch();

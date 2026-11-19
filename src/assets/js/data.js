@@ -3,7 +3,7 @@
 import * as store from './store.js';
 import { files, assetUsage, clearLocal, clearChromeMirror, requestPersistentStorage } from './storage.js';
 import { APP } from './defaults.js';
-import { normalizeUrl, isSafeUrl } from './util.js';
+import { isUsableUrl } from './util.js';
 
 /* --------------------------------------------------------------- 导出 */
 
@@ -32,8 +32,13 @@ export function exportState() {
 
 /* --------------------------------------------------------------- 导入 */
 
+const MAX_IMPORT_BYTES = 8 * 1024 * 1024;
+
 export async function importState(file) {
-  const text = await file.text();
+  // 正常备份（不含上传图片）远小于 8 MB；挡住误选的超大文件，避免一次 JSON.parse 卡死新标签页
+  if (file.size > MAX_IMPORT_BYTES) throw new Error('备份文件超过 8 MB，可能不是 Lumen 的配置');
+  // Windows 记事本等编辑器可能给 UTF-8 文件加 BOM，JSON.parse 会因此失败
+  const text = (await file.text()).replace(/^\uFEFF/, '');
   let parsed;
   try {
     parsed = JSON.parse(text);
@@ -45,10 +50,15 @@ export async function importState(file) {
   if (!incoming || typeof incoming !== 'object') throw new Error('文件结构无法识别');
   if (!Array.isArray(incoming.shortcuts)) throw new Error('缺少 shortcuts 字段，可能不是 Lumen 的备份');
 
-  // 清洗：剔除不安全 URL
-  const shortcuts = incoming.shortcuts.filter((item) => item && isSafeUrl(normalizeUrl(item.url)));
-  if (!shortcuts.length) throw new Error('备份里没有有效的快捷方式');
-
+  // 清洗：剔除不安全 URL 和非字符串 URL（后者只会在计数里造成虚高）
+  const shortcuts = incoming.shortcuts.filter(
+    (item) => item && typeof item.url === 'string' && isUsableUrl(item.url)
+  );
+  // 空快捷方式列表本身是合法备份（用户可能删光了）；但「原先有、却全部无效」
+  // 或只有一句空 shortcuts 的文件仍应拒绝，免得误清空数据。
+  if (!shortcuts.length && (incoming.shortcuts.length || (!incoming.meta && !incoming.config))) {
+    throw new Error('备份里没有有效的快捷方式');
+  }
   store.replaceState({ ...incoming, shortcuts });
   return { count: shortcuts.length };
 }

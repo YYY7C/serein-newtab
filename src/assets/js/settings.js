@@ -3,15 +3,15 @@
  * 全屏浮层 + 左侧分区导航。所有改动即时生效，无需「保存」按钮。
  */
 
-import { h, clear, svgIcon, bus, debounce, relativeTime, formatBytes } from './util.js';
+import { h, clear, svgIcon, bus, debounce, relativeTime, formatBytes, normalizeUrl, isUsableUrl } from './util.js';
 import * as store from './store.js';
-import { makeSwitch, makeSegmented, makeRange, makeStepper, shortcutEditor, confirmDialog } from './modals.js';
+import { makeSwitch, makeSegmented, makeRange, makeStepper, shortcutEditor, confirmDialog, openModal } from './modals.js';
 import { GRADIENTS, ENGINES, engineById, APP, STYLES, styleById } from './defaults.js';
-import { applyBackground, cycleBing, fetchBingGallery, saveLocalWallpaper } from './wallpaper.js';
+import { applyBackground, applyBackgroundLook, cycleBing, fetchBingGallery, saveLocalWallpaper } from './wallpaper.js';
 import { applyConfig, dockWidth } from './theme.js';
 import { exportState, importState, resetAll, usageReport } from './data.js';
 import { refreshClock } from './clock.js';
-import { resolveIcon } from './icons.js';
+import { resolveIcon, previewFileIcon } from './icons.js';
 
 const SECTIONS = [
   { id: 'appearance', label: '外观', icon: 'palette' },
@@ -36,6 +36,12 @@ let navEl = null;
 let bodyEl = null;
 let activeTab = 'appearance';
 let isOpen = false;
+let lastFocus = null;
+// 壁纸可能很大，用户能在上传途中再次选图；只允许最后一次选择生效
+let wallpaperUploadSeq = 0;
+let closeSeq = 0;
+// 读权限 + 遍历书签树是异步的，连点两次会导入两个同名文件夹
+let bookmarkImporting = false;
 
 /* --------------------------------------------------------------- 基座 */
 
@@ -45,7 +51,7 @@ export function initSettings() {
   navEl = h('nav', { class: 'settings-nav' });
   bodyEl = h('div', { class: 'settings-body scroll' });
 
-  panel = h('div', { class: 'settings-panel', role: 'dialog', 'aria-modal': 'true' }, navEl, bodyEl);
+  panel = h('div', { class: 'settings-panel', role: 'dialog', 'aria-modal': 'true', 'aria-label': '设置' }, navEl, bodyEl);
   root = h('div', { class: 'settings' }, scrim, panel);
   document.body.appendChild(root);
 
@@ -53,13 +59,37 @@ export function initSettings() {
 
   scrim.addEventListener('click', close);
   panel.addEventListener('keydown', (event) => {
+    if (event.isComposing || event.keyCode === 229) return;
     if (event.key === 'Escape') {
       event.stopPropagation();
       close();
+      return;
+    }
+    // 设置本身也是模态场景：Tab 到首/尾时循环，别把焦点放回已 inert 的页面或浏览器地址栏
+    if (event.key !== 'Tab' || document.querySelector('.modal.is-open')) return;
+    const focusables = Array.from(
+      panel.querySelectorAll(
+        'button:not([disabled]):not([tabindex="-1"]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
+      )
+    ).filter((node) => node.getClientRects().length > 0);
+    if (!focusables.length) {
+      event.preventDefault();
+      return;
+    }
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    const active = document.activeElement;
+    if (event.shiftKey && (active === first || !panel.contains(active))) {
+      event.preventDefault();
+      last.focus({ preventScroll: true });
+    } else if (!event.shiftKey && (active === last || !panel.contains(active))) {
+      event.preventDefault();
+      first.focus({ preventScroll: true });
     }
   });
 
   document.addEventListener('keydown', (event) => {
+    if (event.isComposing || event.keyCode === 229) return;
     if (event.key !== 'Escape' || !isOpen) return;
     // 上层还有弹窗时交给弹窗自己处理
     if (document.querySelector('.modal.is-open')) return;
@@ -88,6 +118,7 @@ function buildNav() {
           class: `nav-item${section.id === activeTab ? ' is-active' : ''}`,
           type: 'button',
           'data-tab': section.id,
+          'aria-current': section.id === activeTab ? 'page' : null,
           onclick: () => selectSection(section.id),
         },
         h('span', { html: svgIcon(section.icon, 16) }),
@@ -97,46 +128,80 @@ function buildNav() {
   }
 
   navEl.appendChild(h('div', { class: 'nav-spacer' }));
-  navEl.appendChild(
-    h(
-      'button',
-      {
-        class: 'nav-item',
-        type: 'button',
-        onclick: () => window.open('https://github.com/', '_blank', 'noopener'),
-        style: { display: 'none' },
-      },
-      h('span', { text: '' })
-    )
-  );
 }
 
 export function open(tab = 'appearance') {
+  if (document.querySelector('.modal.is-open')) return;
   if (!root) initSettings();
-  activeTab = tab || 'appearance';
+  activeTab = SECTIONS.some((section) => section.id === tab) ? tab : 'appearance';
+  if (!isOpen) lastFocus = document.activeElement;
   isOpen = true;
+  closeSeq += 1;
   // 让页面本体退到后面：设置是「换个场景」而不是「在页面上盖一张纸」，
   // 否则面板和快捷方式/小组件会看起来叠在一起。
   document.documentElement.dataset.overlay = 'settings';
+  root.inert = false;
+  root.classList.remove('is-closing');
+  if (panel) panel.inert = false;
+  root.setAttribute('aria-hidden', 'false');
   root.classList.add('is-open');
   const scrim = root.querySelector('.scrim');
   scrim.classList.add('is-open');
+  const stage = document.querySelector('.stage');
+  if (stage) stage.inert = true;
   selectSection(activeTab);
+  // 键盘用户进入设置后从当前分区开始，而不是继续停留在背后的页面
+  setTimeout(() => {
+    if (!isOpen || document.querySelector('.modal.is-open')) return;
+    const active = document.activeElement;
+    if (active && active !== document.body && root.contains(active)) return;
+    navEl.querySelector('.nav-item.is-active')?.focus({ preventScroll: true });
+  }, 40);
 }
 
 export function close() {
-  if (!root) return;
+  if (!root || !isOpen) return;
   isOpen = false;
+  const seq = ++closeSeq;
   delete document.documentElement.dataset.overlay;
   root.classList.remove('is-open');
+  // 淡出时面板本身不再可操作，但整个浮层继续拦截鼠标，防止点穿
+  root.classList.add('is-closing');
+  if (panel) panel.inert = true;
   root.querySelector('.scrim')?.classList.remove('is-open');
+
+  const modalOpen = Boolean(document.querySelector('.modal.is-open'));
+  const stage = document.querySelector('.stage');
+  if (stage) stage.inert = modalOpen;
+  if (!modalOpen) {
+    const stored = lastFocus;
+    lastFocus = null;
+    const target =
+      stored && stored !== document.body && stored.isConnected && stored.getClientRects().length
+        ? stored
+        : document.querySelector('#topbar-right [data-action="settings"]');
+    if (target?.isConnected && target.getClientRects().length) target.focus?.({ preventScroll: true });
+  }
+  if (root.contains(document.activeElement)) document.activeElement.blur?.();
+  root.setAttribute('aria-hidden', 'true');
+  // 动画结束后再脱离可访问树；这期间面板已 inert，Tab 进不去
+  setTimeout(() => {
+    if (isOpen || seq !== closeSeq) return;
+    if (panel) panel.inert = false;
+    root.classList.remove('is-closing');
+    root.inert = true;
+  }, 320);
 }
 
 function selectSection(id) {
   activeTab = id;
   Array.from(navEl.querySelectorAll('.nav-item')).forEach((node) => {
-    node.classList.toggle('is-active', node.dataset.tab === id);
+    const active = node.dataset.tab === id;
+    node.classList.toggle('is-active', active);
+    if (active) node.setAttribute('aria-current', 'page');
+    else node.removeAttribute('aria-current');
   });
+  bodyEl.scrollTop = 0;
   clear(bodyEl);
   const built = SECTIONS.find((section) => section.id === id);
   bodyEl.appendChild(buildHeader(built));
@@ -190,11 +255,24 @@ function row(name, hint, control, { stacked = false } = {}) {
       ? h('div', { class: 'hint', text: hint })
       : h('div', { class: 'hint' }, hint)
     : null;
+  let controlNode = null;
+  if (control) {
+    controlNode = h('div', { class: 'row-control' }, control);
+    // 行标题就是控件最自然的名字：开关、滑块、色块和文本框默认都没有可访问名称。
+    controlNode
+      .querySelectorAll('.switch, input[type=range], input[type=color], input[type=text], input[type=number], select')
+      .forEach((node) => {
+        if (!node.getAttribute('aria-label')) node.setAttribute('aria-label', name);
+      });
+    controlNode.querySelectorAll('.seg').forEach((node) => {
+      if (!node.getAttribute('aria-label')) node.setAttribute('aria-label', name);
+    });
+  }
   return h(
     'div',
     { class: `row${stacked ? ' is-stacked' : ''}` },
     h('div', { class: 'row-label' }, h('div', { class: 'name', text: name }), hintNode),
-    control ? h('div', { class: 'row-control' }, control) : null
+    controlNode
   );
 }
 
@@ -224,6 +302,7 @@ function buildAppearance() {
           class: `style-card${config.style === preset.id ? ' is-active' : ''}`,
           type: 'button',
           'data-style-id': preset.id,
+          'aria-pressed': String(config.style === preset.id),
           title: preset.desc,
           onclick: () => {
             config.style = preset.id;
@@ -233,6 +312,8 @@ function buildAppearance() {
             refreshClock();
             store.commit('config');
             selectSection('appearance');
+            // 重建分区后把焦点放回当前选中的风格，键盘用户不会掉回页面根部
+            bodyEl.querySelector('.style-card.is-active')?.focus({ preventScroll: true });
           },
         },
         h('span', {
@@ -270,13 +351,17 @@ function buildAppearance() {
               class: `color-dot${config.accent === color ? ' is-active' : ''}`,
               type: 'button',
               title: color,
+              'aria-label': `强调色 ${color}`,
+              'aria-pressed': String(config.accent === color),
               style: { background: color },
               onclick: (event) => {
                 config.accent = color;
-                Array.from(event.currentTarget.parentElement.children).forEach((node) =>
-                  node.classList.remove('is-active')
-                );
+                Array.from(event.currentTarget.parentElement.children).forEach((node) => {
+                  node.classList.remove('is-active');
+                  if (node.matches?.('.color-dot')) node.setAttribute('aria-pressed', 'false');
+                });
                 event.currentTarget.classList.add('is-active');
+                event.currentTarget.setAttribute('aria-pressed', 'true');
                 touch();
               },
             })
@@ -290,6 +375,13 @@ function buildAppearance() {
               value: config.accent,
               oninput: (event) => {
                 config.accent = event.target.value;
+                event.target
+                  .closest('.color-dots')
+                  ?.querySelectorAll('.color-dot')
+                  .forEach((node) => {
+                    node.classList.remove('is-active');
+                    node.setAttribute('aria-pressed', 'false');
+                  });
                 touch();
               },
             })
@@ -346,10 +438,10 @@ function buildAppearance() {
       ),
       row(
         '界面缩放',
-        '整体放大或缩小文字与控件',
+        '放大或缩小主界面的文字与控件',
         makeRange({
-          min: 0.85,
-          max: 1.25,
+          min: 0.8,
+          max: 1.4,
           step: 0.05,
           value: config.fontScale,
           format: (value) => `${Math.round(value * 100)}%`,
@@ -390,7 +482,7 @@ function buildAppearance() {
       ),
       row(
         '性能模式',
-        '关闭毛玻璃与动画。显卡驱动异常、页面卡顿时使用',
+        '关闭毛玻璃与壁纸漂移动画，减少合成开销；显卡驱动异常、页面卡顿时使用',
         makeSwitch(config.performance === true, (value) => {
           config.performance = value;
           touch();
@@ -406,7 +498,7 @@ function buildWallpaper() {
   const config = store.state.config;
   const bg = config.background;
 
-  const gallery = h('div', { class: 'swatch-grid' });
+  const gallery = h('div', { class: 'swatch-grid', role: 'group', 'aria-label': '渐变预设' });
   for (const preset of GRADIENTS) {
     gallery.appendChild(
       h(
@@ -415,13 +507,18 @@ function buildWallpaper() {
           class: `swatch${bg.gradient === preset.id && bg.type === 'gradient' ? ' is-active' : ''}${preset.tone === 'light' ? ' is-light' : ''}`,
           type: 'button',
           title: preset.name,
+          'aria-pressed': String(bg.gradient === preset.id && bg.type === 'gradient'),
           style: { backgroundImage: preset.css },
           'data-id': preset.id,
           onclick: (event) => {
             bg.type = 'gradient';
             bg.gradient = preset.id;
-            Array.from(gallery.children).forEach((node) => node.classList.remove('is-active'));
+            Array.from(gallery.children).forEach((node) => {
+              node.classList.remove('is-active');
+              node.setAttribute('aria-pressed', 'false');
+            });
             event.currentTarget.classList.add('is-active');
+            event.currentTarget.setAttribute('aria-pressed', 'true');
             applyBackground(store.state);
             touch();
           },
@@ -445,18 +542,25 @@ function buildWallpaper() {
       applyBackground(store.state);
       touch();
       selectSection('wallpaper');
+      bodyEl.querySelector('.wallpaper-type button.is-active')?.focus({ preventScroll: true });
     }
   );
+  typeControl.classList.add('wallpaper-type');
 
   const sourceRows = [];
 
   if (bg.type === 'bing') {
     const gallery = h('div', { class: 'bing-gallery' });
     const hint = h('div', { class: 'field-hint', text: '正在获取最近 8 天…' });
+    // 换图后版权说明也要跟着变，否则会一直停在打开面板时那张
+    const currentLabel = h('span', { text: bg.bing?.copyright || '每天更新一张，来自 cn.bing.com 公开接口' });
 
     const paint = () => {
+      currentLabel.textContent = bg.bing?.copyright || '每天更新一张，来自 cn.bing.com 公开接口';
       Array.from(gallery.children).forEach((node) => {
-        node.classList.toggle('is-active', Number(node.dataset.idx) === (bg.bing?.idx ?? 0));
+        const active = Number(node.dataset.idx) === (bg.bing?.idx ?? 0);
+        node.classList.toggle('is-active', active);
+        node.setAttribute('aria-pressed', String(active));
       });
     };
 
@@ -476,6 +580,7 @@ function buildWallpaper() {
                 class: 'bing-item',
                 type: 'button',
                 title: item.copyright || item.title,
+                'aria-pressed': String(Number(item.idx) === (bg.bing?.idx ?? 0)),
                 'data-idx': String(item.idx),
                 style: { backgroundImage: `url("${item.thumb}")` },
                 onclick: async () => {
@@ -506,7 +611,7 @@ function buildWallpaper() {
     sourceRows.push(
       row(
         '必应每日壁纸',
-        bg.bing?.copyright || '每天更新一张，来自 cn.bing.com 公开接口',
+        currentLabel,
         h(
           'button',
           {
@@ -514,7 +619,8 @@ function buildWallpaper() {
             type: 'button',
             html: `${svgIcon('refresh', 14)}<span>随机一张</span>`,
             onclick: async () => {
-              await cycleBing(store.state, 1);
+              // 1..7 的随机步长 = 随机换到另外 7 天中的一张，不会原地不动
+              await cycleBing(store.state, 1 + Math.floor(Math.random() * 7));
               touch();
               paint();
             },
@@ -526,16 +632,24 @@ function buildWallpaper() {
   }
 
   if (bg.type === 'url') {
+    // 地址先立即写回 state（关窗时 pagehide 能落盘），只把「真正加载图片」防抖
+    const applyUrl = debounce(() => {
+      // 用户可能已在 400ms 内切到渐变/必应；不要再按旧输入重载一次壁纸
+      if (store.state.config.background.type !== 'url') return;
+      applyBackground(store.state);
+      touch();
+    }, 400);
     const input = h('input', {
       class: 'text-input',
       type: 'text',
       value: bg.url,
+      maxlength: '2048',
       placeholder: 'https://example.com/wallpaper.jpg',
-      oninput: debounce((event) => {
-        bg.url = event.target.value.trim();
-        applyBackground(store.state);
-        touch();
-      }, 400),
+      oninput: (event) => {
+        // 允许直接粘贴 example.com/a.jpg，而不是必须手打 https://
+        bg.url = normalizeUrl(event.target.value.trim());
+        applyUrl();
+      },
     });
     sourceRows.push(row('图片地址', '支持任意可在浏览器中打开的图片链接', input, { stacked: true }));
   }
@@ -548,19 +662,60 @@ function buildWallpaper() {
       onchange: async (event) => {
         const file = event.target.files?.[0];
         if (!file) return;
-        if (file.size > 24 * 1024 * 1024) {
-          bus.emit('toast', { text: '图片超过 24 MB，请压缩后再试', error: true });
+        if (!file.type.startsWith('image/')) {
+          bus.emit('toast', { text: '请选择图片文件', error: true });
+          event.target.value = '';
           return;
         }
-        const id = await saveLocalWallpaper(file);
-        if (bg.fileId) {
-          const { files } = await import('./storage.js');
-          files.remove(`wallpaper:${bg.fileId}`);
+        if (file.size > 24 * 1024 * 1024) {
+          bus.emit('toast', { text: '图片超过 24 MB，请压缩后再试', error: true });
+          event.target.value = '';
+          return;
         }
+        const seq = ++wallpaperUploadSeq;
+        const id = await saveLocalWallpaper(file).catch(() => '');
+        if (!id) {
+          if (seq === wallpaperUploadSeq) {
+            bus.emit('toast', { text: '壁纸保存失败，请检查浏览器存储空间', error: true });
+            event.target.value = '';
+          }
+          return;
+        }
+        // 用户在上传途中又选了另一张：丢弃这次迟到的结果
+        if (seq !== wallpaperUploadSeq || store.state.config.background !== bg) {
+          const { files } = await import('./storage.js');
+          files.remove(`wallpaper:${id}`);
+          if (seq === wallpaperUploadSeq) event.target.value = '';
+          return;
+        }
+        const oldFileId = bg.fileId;
         bg.fileId = id;
         applyBackground(store.state);
         touch();
-        selectSection('wallpaper');
+        // 先把新 fileId 同步落盘，确认成功后再删除旧文件；
+        // 否则崩溃/配额失败时会出现「状态指向旧文件，但旧文件已经被删掉」。
+        const persisted = store.flushNow();
+        if (!persisted) {
+          // 落盘失败：回退到旧壁纸并清掉刚落盘的新文件，
+          // 否则刷新后会回到旧状态，新文件还会变成无人引用的孤儿。
+          bg.fileId = oldFileId;
+          applyBackground(store.state);
+          const { files: assetFiles } = await import('./storage.js');
+          assetFiles.remove(`wallpaper:${id}`);
+          event.target.value = '';
+          return;
+        }
+        if (oldFileId && oldFileId !== id) {
+          const { files } = await import('./storage.js');
+          files.remove(`wallpaper:${oldFileId}`);
+        }
+        event.target.value = '';
+        // 保存大图可能耗时，用户可能已经切到别的分区；不要强行把他拽回壁纸页
+        if (isOpen && activeTab === 'wallpaper') {
+          selectSection('wallpaper');
+          // 原来的上传按钮已被重建，键盘焦点先回到当前分区导航
+          navEl.querySelector('.nav-item.is-active')?.focus({ preventScroll: true });
+        }
         bus.emit('toast', { text: '已应用本地壁纸' });
       },
     });
@@ -569,13 +724,14 @@ function buildWallpaper() {
         '本地上传',
         bg.fileId ? '已保存到浏览器 IndexedDB，可离线使用' : '支持 JPG / PNG / WebP，建议不超过 24 MB',
         h(
-          'button',
-          {
+          'div',
+          { style: { display: 'flex', alignItems: 'center' } },
+          h('button', {
             class: 'btn',
             type: 'button',
             html: `${svgIcon('upload', 14)}<span>${bg.fileId ? '更换图片' : '选择图片'}</span>`,
             onclick: () => fileInput.click(),
-          },
+          }),
           fileInput
         )
       )
@@ -618,7 +774,7 @@ function buildWallpaper() {
           format: (value) => `${value}px`,
           onInput: (value) => {
             bg.blur = value;
-            applyBackground(store.state);
+            applyBackgroundLook(store.state);
             touch();
           },
         })
@@ -633,7 +789,7 @@ function buildWallpaper() {
           format: (value) => `${value}%`,
           onInput: (value) => {
             bg.brightness = value;
-            applyBackground(store.state);
+            applyBackgroundLook(store.state);
             touch();
           },
         })
@@ -648,7 +804,7 @@ function buildWallpaper() {
           format: (value) => `${value}%`,
           onInput: (value) => {
             bg.saturate = value;
-            applyBackground(store.state);
+            applyBackgroundLook(store.state);
             touch();
           },
         })
@@ -663,7 +819,7 @@ function buildWallpaper() {
           format: (value) => `${value}%`,
           onInput: (value) => {
             bg.veil = value;
-            applyBackground(store.state);
+            applyBackgroundLook(store.state);
             touch();
           },
         })
@@ -673,7 +829,7 @@ function buildWallpaper() {
         '四周轻微压暗，让中心内容更聚焦',
         makeSwitch(bg.vignette !== false, (value) => {
           bg.vignette = value;
-          applyBackground(store.state);
+          applyBackgroundLook(store.state);
           touch();
         })
       )
@@ -698,6 +854,7 @@ function buildLayout() {
     refreshClock();
     store.commit('config');
     selectSection('layout');
+    bodyEl.querySelector('.group .row .btn')?.focus({ preventScroll: true });
   };
 
   const nameInput = h('input', {
@@ -777,7 +934,7 @@ function buildLayout() {
         '',
         makeRange({
           min: 44,
-          max: 90,
+          max: 96,
           step: 2,
           value: layout.iconSize,
           format: (value) => `${value}px`,
@@ -793,7 +950,7 @@ function buildLayout() {
         '',
         makeRange({
           min: 8,
-          max: 40,
+          max: 48,
           value: layout.gap,
           format: (value) => `${value}px`,
           onInput: (value) => {
@@ -841,6 +998,7 @@ function buildLayout() {
           ],
           config.sidebar,
           (value) => {
+            if (value === 'hidden' && config.sidebar !== 'hidden') config.lastSidebar = config.sidebar;
             config.sidebar = value;
             touch();
           }
@@ -858,18 +1016,45 @@ function favNode(item) {
   const node = h('span', {
     class: `link-fav${descriptor.brand ? ' is-brand' : ''}`,
     text: descriptor.brand ? '' : descriptor.text,
+    'aria-hidden': 'true',
   });
   if (!descriptor.brand) {
     node.style.background = `linear-gradient(145deg, ${descriptor.from}, ${descriptor.to})`;
     if (descriptor.fg) node.style.color = descriptor.fg;
   }
-  if (descriptor.src) {
+  if (descriptor.pendingFileId) {
+    previewFileIcon(descriptor.pendingFileId)
+      .then((url) => {
+        if (!url || !node.isConnected) return;
+        const img = h('img', { src: url, alt: '', loading: 'lazy', decoding: 'async' });
+        img.addEventListener(
+          'load',
+          () => {
+            Array.from(node.childNodes).forEach((child) => {
+              if (child !== img) child.remove();
+            });
+          },
+          { once: true }
+        );
+        img.addEventListener(
+          'error',
+          () => {
+            img.remove();
+            node.textContent = descriptor.text;
+          },
+          { once: true }
+        );
+        node.appendChild(img);
+      })
+      .catch(() => {});
+  } else if (descriptor.src) {
     const img = h('img', { src: descriptor.src, alt: '', loading: 'lazy', decoding: 'async' });
     img.addEventListener(
       'load',
       () => {
-        if (!descriptor.brand) node.textContent = '';
-        node.appendChild(img);
+        Array.from(node.childNodes).forEach((child) => {
+          if (child !== img) child.remove();
+        });
       },
       { once: true }
     );
@@ -877,10 +1062,14 @@ function favNode(item) {
       'error',
       () => {
         img.remove();
-        if (descriptor.brand) node.textContent = descriptor.text;
+        node.classList.remove('is-brand');
+        node.style.background = `linear-gradient(145deg, ${descriptor.from}, ${descriptor.to})`;
+        node.style.color = descriptor.fg;
+        node.textContent = descriptor.text;
       },
       { once: true }
     );
+    node.appendChild(img);
   }
   return node;
 }
@@ -890,10 +1079,18 @@ function buildShortcuts() {
   const behavior = config.behavior;
 
   const list = h('div', { class: 'link-list', style: { maxHeight: '320px' } });
+  const countTitle = h('div', { class: 'group-title', text: `快捷方式 · ${store.state.shortcuts.length}` });
+  let pendingFocus = null;
   const paint = () => {
+    const scrollTop = list.scrollTop;
     clear(list);
+    countTitle.textContent = `快捷方式 · ${store.state.shortcuts.length}`;
     const items = [...store.state.shortcuts].sort((a, b) => a.order - b.order);
     const groupName = (id) => store.state.groups.find((group) => group.id === id)?.title;
+
+    if (!items.length) {
+      list.appendChild(h('div', { class: 'empty-state', text: '还没有快捷方式' }));
+    }
 
     for (const item of items) {
       const folder = item.groupId ? groupName(item.groupId) : '';
@@ -902,16 +1099,20 @@ function buildShortcuts() {
           'div',
           { class: 'link-row', style: { cursor: 'default' } },
           favNode(item),
-          h('span', { class: 'name', text: item.title }),
+          h('span', { class: 'name', text: item.title, title: item.title }),
           folder ? h('span', { class: 'suggest-hint', text: folder }) : null,
           h('button', {
             class: 'card-action',
             type: 'button',
             title: '编辑',
+            'aria-label': `编辑${item.title}`,
+            'data-item-id': item.id,
+            'data-item-action': 'edit',
             html: svgIcon('edit', 13),
             onclick: async () => {
               const result = await shortcutEditor({ shortcut: item, groups: store.state.groups });
               if (!result) return;
+              pendingFocus = { id: item.id, action: 'edit' };
               store.updateShortcut(item.id, result);
               paint();
             },
@@ -920,6 +1121,9 @@ function buildShortcuts() {
             class: 'card-action',
             type: 'button',
             title: '删除',
+            'aria-label': `删除${item.title}`,
+            'data-item-id': item.id,
+            'data-item-action': 'delete',
             html: svgIcon('trash', 13),
             onclick: async () => {
               if (behavior.confirmDelete) {
@@ -931,13 +1135,55 @@ function buildShortcuts() {
                 });
                 if (!ok) return;
               }
+              const sorted = [...store.state.shortcuts].sort((a, b) => a.order - b.order);
+              const index = sorted.findIndex((entry) => entry.id === item.id);
+              const neighbor = sorted[index + 1] || sorted[index - 1];
+              pendingFocus = neighbor ? { id: neighbor.id, action: 'edit' } : null;
+              const snapshot = { ...item };
               store.removeShortcut(item.id);
               paint();
+              if (!neighbor) {
+                // 删掉最后一条时列表里已经没有可聚焦的行，把焦点交给导入按钮
+                bodyEl.querySelector('.group .row .btn')?.focus({ preventScroll: true });
+              }
+              bus.emit('toast', {
+                text: `已删除「${item.title}」`,
+                action: {
+                  label: '撤销',
+                  onClick: () => {
+                    store.restoreShortcut(snapshot);
+                    if (list.isConnected) {
+                      pendingFocus = { id: snapshot.id, action: 'edit' };
+                      paint();
+                    } else if (root && isOpen && activeTab === 'shortcuts') {
+                      // 撤销时用户可能已经切走/重开了设置页，旧列表节点不能再用
+                      selectSection('shortcuts');
+                      const escaped =
+                        typeof CSS !== 'undefined' && CSS.escape
+                          ? CSS.escape(snapshot.id)
+                          : String(snapshot.id).replace(/"/g, '\\"');
+                      bodyEl
+                        .querySelector(`[data-item-id="${escaped}"][data-item-action="edit"]`)
+                        ?.focus({ preventScroll: true });
+                    }
+                  },
+                },
+              });
             },
           })
         )
       );
     }
+
+    if (pendingFocus) {
+      const escaped =
+        typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(pendingFocus.id) : pendingFocus.id.replace(/"/g, '\\"');
+      list
+        .querySelector(`[data-item-id="${escaped}"][data-item-action="${pendingFocus.action}"]`)
+        ?.focus({ preventScroll: true });
+      pendingFocus = null;
+    }
+    list.scrollTop = scrollTop;
   };
   paint();
 
@@ -983,14 +1229,20 @@ function buildShortcuts() {
         })
       )
     ),
-    group(`全部条目 · ${store.state.shortcuts.length}`, list)
+    h('div', { class: 'group' }, countTitle, h('div', { class: 'rows' }, list))
   );
 }
 
 async function requestPermission(name) {
   return new Promise((resolve) => {
     try {
-      chrome.permissions.request({ permissions: [name] }, (granted) => resolve(Boolean(granted)));
+      chrome.permissions.request({ permissions: [name] }, (granted) => {
+        if (globalThis.chrome?.runtime?.lastError) {
+          resolve(false);
+          return;
+        }
+        resolve(Boolean(granted));
+      });
     } catch {
       resolve(false);
     }
@@ -1000,7 +1252,13 @@ async function requestPermission(name) {
 function getBookmarkTree() {
   return new Promise((resolve) => {
     try {
-      chrome.bookmarks.getTree((tree) => resolve(tree || []));
+      chrome.bookmarks.getTree((tree) => {
+        if (globalThis.chrome?.runtime?.lastError) {
+          resolve([]);
+          return;
+        }
+        resolve(tree || []);
+      });
     } catch {
       resolve([]);
     }
@@ -1008,6 +1266,19 @@ function getBookmarkTree() {
 }
 
 async function importBookmarks() {
+  if (bookmarkImporting) return;
+  bookmarkImporting = true;
+  try {
+    await runBookmarkImport();
+  } catch (err) {
+    console.error('[lumen/settings] 书签导入失败', err);
+    bus.emit('toast', { text: '书签导入失败，请重试', error: true });
+  } finally {
+    bookmarkImporting = false;
+  }
+}
+
+async function runBookmarkImport() {
   const granted = await requestPermission('bookmarks');
   if (!granted) {
     bus.emit('toast', { text: '未获得书签权限', error: true });
@@ -1015,15 +1286,19 @@ async function importBookmarks() {
   }
 
   const tree = await getBookmarkTree();
-  const bar = tree[0]?.children?.find((node) => node.id === '1') || tree[0]?.children?.[0];
+  const rootChildren = Array.isArray(tree?.[0]?.children) ? tree[0].children : [];
+  const bar = rootChildren.find((node) => node?.id === '1') || rootChildren[0];
   const collected = [];
 
   const walk = (nodes, depth) => {
-    for (const node of nodes || []) {
+    if (!Array.isArray(nodes)) return;
+    for (const node of nodes) {
       if (collected.length >= 60) return;
-      if (node.url) {
-        collected.push({ title: node.title || node.url, url: node.url });
-      } else if (node.children && depth < 2) {
+      if (!node || typeof node !== 'object') continue;
+      if (typeof node.url === 'string' && node.url) {
+        const url = normalizeUrl(node.url);
+        if (url && isUsableUrl(url)) collected.push({ title: node.title || url, url });
+      } else if (Array.isArray(node.children) && depth < 2) {
         walk(node.children, depth + 1);
       }
     }
@@ -1035,13 +1310,13 @@ async function importBookmarks() {
     return;
   }
 
-  const folder = store.addGroup('书签导入');
-  for (const item of collected) {
-    const created = store.addShortcut({ title: item.title.slice(0, 60), url: item.url });
-    store.moveShortcutToGroup(created.id, folder.id);
+  const imported = store.importShortcuts('书签导入', collected);
+  bus.emit('toast', { text: `已导入 ${imported?.count || 0} 个书签` });
+  if (root && isOpen) {
+    selectSection('shortcuts');
+    // 「开始导入」按钮刚被重建掉了，把焦点交给新列表的第一个操作
+    bodyEl.querySelector('.link-list .card-action')?.focus({ preventScroll: true });
   }
-  bus.emit('toast', { text: `已导入 ${collected.length} 个书签` });
-  selectSection('shortcuts');
 }
 
 /* --------------------------------------------------------------- 小组件 */
@@ -1077,18 +1352,25 @@ function buildSearch() {
 
   const engineGrid = h(
     'div',
-    { class: 'swatch-grid', style: { gridTemplateColumns: 'repeat(auto-fill, minmax(112px, 1fr))' } },
+    {
+      class: 'swatch-grid',
+      role: 'group',
+      'aria-label': '默认搜索引擎',
+      style: { gridTemplateColumns: 'repeat(auto-fill, minmax(112px, 1fr))' },
+    },
     ...ENGINES.map((engine) =>
       h(
         'button',
         {
           class: `btn${search.engine === engine.id ? ' is-primary' : ''}`,
           type: 'button',
+          'aria-pressed': String(search.engine === engine.id),
           style: { justifyContent: 'flex-start', height: '38px' },
           onclick: () => {
             search.engine = engine.id;
             touch();
             selectSection('search');
+            bodyEl.querySelector('.swatch-grid .btn.is-primary')?.focus({ preventScroll: true });
           },
         },
         h('span', {
@@ -1161,8 +1443,13 @@ function buildData() {
       if (!file) return;
       try {
         const result = await importState(file);
+        applyBackground(store.state);
+        refreshClock();
         bus.emit('toast', { text: `已导入 ${result.count} 个快捷方式` });
-        selectSection('data');
+        if (isOpen) {
+          selectSection('data');
+          navEl.querySelector('.nav-item.is-active')?.focus({ preventScroll: true });
+        }
       } catch (err) {
         bus.emit('toast', { text: `导入失败：${err.message}`, error: true });
       }
@@ -1177,7 +1464,7 @@ function buildData() {
       '备份',
       row(
         '导出配置',
-        '生成 JSON 备份文件（含图标、壁纸引用与待办）',
+        '生成 JSON 备份（含配置、图标/壁纸引用与待办，不含上传的图片文件）',
         h('button', {
           class: 'btn',
           type: 'button',
@@ -1190,15 +1477,16 @@ function buildData() {
       ),
       row(
         '导入配置',
-        '会覆盖当前全部数据，请先导出备份',
+        '会覆盖配置、快捷方式、待办与便签（上传的图片文件不在 JSON 里），请先导出备份',
         h(
-          'button',
-          {
+          'div',
+          { style: { display: 'flex', alignItems: 'center' } },
+          h('button', {
             class: 'btn',
             type: 'button',
             html: `${svgIcon('upload', 14)}<span>选择文件</span>`,
             onclick: () => importInput.click(),
-          },
+          }),
           importInput
         )
       )
@@ -1324,12 +1612,14 @@ function showShortcuts() {
     ['/', '聚焦搜索框（非输入状态）'],
     [`${mod} + ,`, '打开设置'],
     ['Esc', '关闭当前浮层'],
-    ['Tab / ↑ ↓', '在搜索结果间移动'],
+    ['↑ ↓', '在搜索结果间移动'],
+    ['Tab', '收起联想并离开搜索框'],
     ['← → ↑ ↓', '在图标间移动焦点'],
     ['Enter', '打开选中的图标'],
     ['F2', '编辑选中的图标'],
     ['Delete', '删除选中的图标'],
-    ['中键点击', '在后台新标签页打开'],
+    ['中键 / ' + mod + ' + 点击', '在后台新标签页打开'],
+    ['Shift + 点击', '在前台新标签页打开'],
   ];
 
   const body = h(
@@ -1340,9 +1630,7 @@ function showShortcuts() {
     )
   );
 
-  import('./modals.js').then(({ openModal }) => {
-    openModal({ title: '快捷键', body, footer: [] });
-  });
+  openModal({ title: '快捷键', body, footer: [] });
 }
 
 /* --------------------------------------------------------------- 注册 */

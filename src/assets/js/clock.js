@@ -6,7 +6,6 @@ import { describeDate, WEEKDAYS } from './lunar.js';
 let els = null;
 let stateRef = null;
 let timer = 0;
-let lastRendered = '';
 
 export function initClock(store) {
   stateRef = store.state;
@@ -24,7 +23,10 @@ export function initClock(store) {
   scheduleTick();
 
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) {
+    if (document.hidden) {
+      // 后台标签页不再每秒唤醒计时器；重新可见时立刻补一帧
+      clearTimeout(timer);
+    } else {
       tick();
       scheduleTick();
     }
@@ -37,12 +39,14 @@ export function initClock(store) {
 
 function paintStructure() {
   const layout = stateRef.config.layout;
-  els.hero.hidden = !(layout.showClock || layout.showDate || layout.showGreeting);
+  const showHero = layout.showClock || layout.showDate || layout.showGreeting;
+  els.hero.hidden = !showHero;
   els.greeting.hidden = !layout.showGreeting;
   els.time.hidden = !layout.showClock;
   els.dateline.hidden = !(layout.showDate || layout.showLunar);
-  els.seconds.hidden = !layout.showSeconds;
-  els.meridiem.hidden = layout.clock24;
+  // 秒与 AM/PM 依附于时钟本体：时钟关掉时它们不该单独留在页面上
+  els.seconds.hidden = !layout.showClock || !layout.showSeconds;
+  els.meridiem.hidden = layout.clock24 || !layout.showClock;
 }
 
 /* --------------------------------------------------------------- 问候 */
@@ -100,7 +104,11 @@ function tick(force = false) {
     const text = name ? `${greeting.text}，${name}` : greeting.text;
     if (els.greeting.dataset.text !== text) {
       els.greeting.dataset.text = text;
-      els.greeting.innerHTML = `${svgIcon(greeting.icon, 15)}<span>${text}</span>`;
+      // 称呼是用户输入，必须走 textContent，避免把名字当成 HTML 解析
+      els.greeting.innerHTML = svgIcon(greeting.icon, 15);
+      const label = document.createElement('span');
+      label.textContent = text;
+      els.greeting.appendChild(label);
     }
   }
 
@@ -110,8 +118,6 @@ function tick(force = false) {
     els.dateline.dataset.day = dayKey;
     renderDateline(now, layout);
   }
-
-  lastRendered = timeText;
 }
 
 function renderDateline(now, layout) {
@@ -131,7 +137,7 @@ function renderDateline(now, layout) {
         if (index > 0) els.dateline.appendChild(makeDot());
         els.dateline.appendChild(document.createTextNode(text));
       });
-      els.dateline.appendChild(makeDot());
+      if (parts.length) els.dateline.appendChild(makeDot());
       const chip = document.createElement('span');
       chip.className = 'festival';
       chip.textContent = info.festival;
@@ -158,12 +164,21 @@ function makeDot() {
 
 function scheduleTick() {
   clearTimeout(timer);
-  const now = Date.now();
-  const delay = 1000 - (now % 1000);
+  const layout = stateRef.config.layout;
+  const needsTick = layout.showClock || layout.showGreeting || layout.showDate || layout.showLunar;
+  if (!needsTick || document.hidden) return;
+
+  const now = new Date();
+  // 不显示秒时，没必要每秒醒来：对齐到下一分钟即可
+  const delay =
+    layout.showClock && layout.showSeconds
+      ? 1000 - (Date.now() % 1000) + 8
+      : (60 - now.getSeconds()) * 1000 - now.getMilliseconds() + 12;
+
   timer = setTimeout(() => {
     tick();
     scheduleTick();
-  }, delay + 8);
+  }, delay);
 }
 
 /** 配置变更后重新布局（例如关掉时钟） */
@@ -171,6 +186,7 @@ export function refreshClock() {
   paintStructure();
   els.dateline.dataset.day = '';
   tick(true);
+  scheduleTick();
 }
 
 export { greetingFor };
