@@ -7,7 +7,7 @@ import { uid, normalizeUrl, isUsableUrl, isSafeImageUrl } from './util.js';
 export const APP = {
   name: 'Lumen',
   subtitle: '新标签页',
-  version: '1.1.1',
+  version: '1.1.2',
   schema: 1,
 };
 

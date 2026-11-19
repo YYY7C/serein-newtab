@@ -6,7 +6,7 @@
 
 ## 一、它解决什么问题
 
-预研结论（详见 [Infinity新标签页Pro-开源平替预研报告.md](./Infinity新标签页Pro-开源平替预研报告.md)）是：
+选型时的取舍结论是：
 
 - 美学向项目（Tabliss / Bonjourr / mue）没有「文件夹 + 图标网格」这套信息架构；
 - 拨号盘类项目（YASD / TabMark / Lemon）有分组，但没有一体化仪表盘；
@@ -89,12 +89,7 @@ Lumen 的做法是把上面几件事一次做对：
 4. **选择本仓库的 `src` 目录**
 5. 新建标签页
 
-工具栏图标（点击可重新打开新标签页）使用 `assets/img/icon-*.png`。
-如果想换成自己的品牌图，改 `tools/make-icons.js` 里的颜色/形状后执行：
-
-```bash
-node tools/make-icons.js
-```
+工具栏图标（点击可重新打开新标签页）使用 `assets/img/icon-*.png`，已随仓库提供，不需要任何生成步骤。
 
 ### 首次使用
 
@@ -167,7 +162,7 @@ src/
 │   │   ├── app.css             背景、时钟、搜索、网格、磁贴、卡片、顶栏与字标
 │   │   ├── styles.css          六套视觉风格的表层覆写（含各自的字标排印）
 │   │   └── overlays.css        设置面板、弹窗、右键菜单、Toast
-│   ├── img/                    icon-16/32/48/128.png
+│   ├── img/                    icon-16/32/48/128.png + 纸张噪点 noise.png
 │   ├── brand/                  内置站点图标（70+ 个 48×48 SVG）+ NOTICE.md
 │   └── js/
 │       ├── main.js             启动入口、顶栏、Toast
@@ -189,9 +184,6 @@ src/
 │       ├── settings.js         设置面板（8 个分区）
 │       ├── data.js             导入 / 导出 / 重置 / 用量
 │       └── background.js       Service Worker（工具栏图标点击）
-└── tools/
-    ├── make-icons.js           零依赖 PNG 图标生成器
-    └── build-brand-logos.mjs   把 Simple Icons 单色字形排成白底方形图标
 ```
 
 ---
@@ -211,7 +203,6 @@ src/
 | **新增内置站点图标** | 放一个 `assets/brand/<slug>.svg`，再到 `assets/js/brands.js` 里登记 host（许可与来源见 `assets/brand/NOTICE.md`） |
 | 新增 UI 图标 | `assets/js/util.js` → `PATHS` |
 | 默认种子快捷方式 | `assets/js/defaults.js` → `SEED_SHORTCUTS` |
-| 应用图标 / 纸张噪点 | `tools/make-icons.js` |
 
 设置项改动会即时写入 `localStorage`（180ms 防抖），无需手动保存。
 
