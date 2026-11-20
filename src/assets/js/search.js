@@ -9,7 +9,7 @@ import { $, h, clear, svgIcon, debounce, normalizeUrl, isSafeUrl, bus, hostOf } 
 import { ENGINES, engineById } from './defaults.js';
 import * as store from './store.js';
 import { openMenu, closeMenu, isMenuOpen } from './menu.js';
-import { resolveIcon, brandSlugFor, brandLogoUrl, previewFileIcon } from './icons.js';
+import { resolveIcon, brandSlugFor, brandLogoUrl, previewFileIcon, isFaviconPlaceholder } from './icons.js';
 
 let els = null;
 let rows = [];
@@ -547,8 +547,19 @@ function renderSuggestions(remote = [], { keepActive = false } = {}) {
         img.addEventListener(
           'load',
           () => {
-            Array.from(thumb.childNodes).forEach((child) => {
-              if (child !== img) child.remove();
+            // `_favicon` 的灰地球占位图 = 没有图标：保留字符，丢弃图片
+            isFaviconPlaceholder(img).then((placeholder) => {
+              if (placeholder) {
+                img.remove();
+                thumb.classList.remove('is-brand');
+                thumb.style.background = `linear-gradient(145deg, ${descriptor.from}, ${descriptor.to})`;
+                thumb.style.color = descriptor.fg;
+                thumb.textContent = descriptor.text;
+                return;
+              }
+              Array.from(thumb.childNodes).forEach((child) => {
+                if (child !== img) child.remove();
+              });
             });
           },
           { once: true }

@@ -43,7 +43,7 @@ export function cellSize(iconSize) {
 export function dockWidth(layout = {}) {
   const iconSize = clamp(layout.iconSize ?? 60, 40, 96);
   const columns = Math.round(clamp(layout.columns ?? 6, 3, 14));
-  const gap = clamp(layout.gap ?? 20, 4, 48);
+  const gap = clamp(layout.gap ?? 20, 4, 64);
   return Math.round(columns * cellSize(iconSize) + (columns - 1) * gap);
 }
 
@@ -74,7 +74,7 @@ export function applyConfig(state) {
   const layout = config.layout;
   const iconSize = clamp(layout.iconSize ?? 60, 40, 96);
   const columns = Math.round(clamp(layout.columns ?? 6, 3, 14));
-  const gap = clamp(layout.gap ?? 20, 4, 48);
+  const gap = clamp(layout.gap ?? 20, 4, 64);
   const cell = cellSize(iconSize);
   style.setProperty('--icon-size', `${iconSize}px`);
   style.setProperty('--grid-gap', `${gap}px`);

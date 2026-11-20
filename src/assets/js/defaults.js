@@ -7,16 +7,21 @@ import { uid, normalizeUrl, isUsableUrl, isSafeImageUrl } from './util.js';
 export const APP = {
   name: 'Lumen',
   subtitle: '新标签页',
-  version: '1.1.3',
+  version: '1.1.4',
   schema: 1,
 };
 
 /**
  * 布局默认值版本。只在「默认网格」发生需要迁移的变化时 +1：
  * v2 把默认图标从 60px 放大到 72px、间距从 20px 放宽到 28px；
- * v3 把默认间距再从 28px 放宽到 36px，缓解图标之间的拥挤感。
+ * v3 把默认间距再从 28px 放宽到 36px，缓解图标之间的拥挤感；
+ * v4 把默认间距从 36px 放宽到 48px，不再要求列数/图标大小也停在旧默认值。
  */
-const GRID_DEFAULTS_VERSION = 3;
+const GRID_DEFAULTS_VERSION = 4;
+
+/** 历史出现过的默认间距：迁移时只要还停在这些值上，就说明用户没自己调过 */
+const LEGACY_GAPS = new Set([20, 28, 36]);
+const DEFAULT_GAP = 48;
 
 /* --------------------------------------------------------------- 壁纸预设 */
 
@@ -292,7 +297,7 @@ export function createDefaultState() {
       layout: {
         columns: 6,
         iconSize: 72,
-        gap: 36,
+        gap: DEFAULT_GAP,
         showClock: true,
         clock24: true,
         showSeconds: false,
@@ -420,16 +425,18 @@ export function migrate(raw) {
     ? Math.min(Date.now(), Math.max(0, metaUpdated))
     : Date.now();
 
-  // 只有列数/图标/间距三项都停在旧默认值时才升级，避免覆盖用户自己的排版
+  // 逐版迁移：只在字段还停在「历史默认值」时才升级，避免覆盖用户自己的排版
   if (previousDefaults < GRID_DEFAULTS_VERSION) {
     const layout = merged.config?.layout;
-    if (layout && layout.columns === 6 && layout.iconSize === 60 && layout.gap === 20) {
+    // v2：图标 60 → 72（整张网格还是旧默认布局时才动）
+    if (previousDefaults < 2 && layout && layout.columns === 6 && layout.iconSize === 60) {
       layout.iconSize = 72;
-      layout.gap = 28;
     }
-    // v3：间距从 28px 放宽到 36px，只迁移仍停在 v2 默认值上的用户
-    if (layout && layout.columns === 6 && layout.iconSize === 72 && layout.gap === 28) {
-      layout.gap = 36;
+    // v3/v4：间距只要还停在历史默认值上就抬到当前默认。
+    // 不能再要求列数/图标大小一起匹配——用户只调过图标大小就被旧间距永久卡住，
+    // 这正是「改了几次默认值还是觉得挤」的根因。
+    if (layout && LEGACY_GAPS.has(Number(layout.gap))) {
+      layout.gap = DEFAULT_GAP;
     }
   }
   merged.meta.defaultsVersion = Math.max(previousDefaults, GRID_DEFAULTS_VERSION);
@@ -524,7 +531,7 @@ export function migrate(raw) {
     ['config', 'fontScale', 0.8, 1.4],
     ['config.layout', 'columns', 3, 14],
     ['config.layout', 'iconSize', 40, 96],
-    ['config.layout', 'gap', 4, 48],
+    ['config.layout', 'gap', 4, 64],
     ['config.background', 'blur', 0, 30],
     ['config.background', 'brightness', 30, 150],
     ['config.background', 'saturate', 0, 200],

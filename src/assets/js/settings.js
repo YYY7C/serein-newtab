@@ -950,7 +950,7 @@ function buildLayout() {
         '',
         makeRange({
           min: 8,
-          max: 48,
+          max: 64,
           value: layout.gap,
           format: (value) => `${value}px`,
           onInput: (value) => {

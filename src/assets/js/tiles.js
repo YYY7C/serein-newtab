@@ -7,7 +7,7 @@
 
 import { h, clear, $, svgIcon, bus, hostOf, isUsableUrl } from './util.js';
 import * as store from './store.js';
-import { resolveIcon } from './icons.js';
+import { resolveIcon, isFaviconPlaceholder, isKnownPlaceholder } from './icons.js';
 import { files, trackObjectUrl } from './storage.js';
 import { openMenu } from './menu.js';
 
@@ -87,6 +87,10 @@ function buildIcon(item) {
         box.classList.remove('is-brand');
         box.appendChild(monoNode(descriptor));
       },
+      onDrop: () => {
+        box.classList.remove('is-brand');
+        box.appendChild(monoNode(descriptor));
+      },
     });
     return box;
   }
@@ -105,7 +109,12 @@ function buildIcon(item) {
   return box;
 }
 
-function attachImage(box, src, { cover = false, onError = null } = {}) {
+function attachImage(box, src, { cover = false, onError = null, onDrop = null } = {}) {
+  // 已经确认是通用占位图：直接跳过，字符徽标原地留着
+  if (isKnownPlaceholder(src)) {
+    onDrop?.();
+    return;
+  }
   const img = h('img', {
     class: `tile-img${cover ? ' is-cover' : ''}`,
     src,
@@ -115,11 +124,19 @@ function attachImage(box, src, { cover = false, onError = null } = {}) {
     draggable: 'false',
   });
   const reveal = () => {
-    img.classList.add('is-loaded');
-    // 图标加载成功后清掉兜底字符，但保留品牌色渐变底：
-    // 透明底的站点图标会露出这层颜色，而不是变成一块空白。
-    const mono = box.querySelector('.tile-mono');
-    if (mono) mono.textContent = '';
+    isFaviconPlaceholder(img).then((placeholder) => {
+      if (placeholder) {
+        // `_favicon` 的灰地球占位图等于「没有图标」：移除图片，露出兜底字符
+        img.remove();
+        onDrop?.();
+        return;
+      }
+      img.classList.add('is-loaded');
+      // 图标加载成功后清掉兜底字符，但保留品牌色渐变底：
+      // 透明底的站点图标会露出这层颜色，而不是变成一块空白。
+      const mono = box.querySelector('.tile-mono');
+      if (mono) mono.textContent = '';
+    });
   };
   img.addEventListener('load', reveal, { once: true });
   img.addEventListener(
@@ -184,7 +201,7 @@ function buildMiniIcon(item) {
   }
 
   const attach = (src, { cover = false, isBrand = descriptor.brand } = {}) => {
-    if (!src) return;
+    if (!src || isKnownPlaceholder(src)) return;
     const img = h('img', {
       class: cover ? 'is-cover' : '',
       src,
@@ -196,13 +213,20 @@ function buildMiniIcon(item) {
       draggable: 'false',
     });
     const reveal = () => {
-      // 图片可能在 cell 挂进 DOM 之前就完成（缓存命中）；这里不要用 isConnected 拦截，
-      // 否则迟到的 load 已经不会再触发，兜底文字会一直压在透明图标下面。
-      if (!isBrand) {
-        Array.from(cell.childNodes).forEach((child) => {
-          if (child.nodeType === Node.TEXT_NODE) child.remove();
-        });
-      }
+      isFaviconPlaceholder(img).then((placeholder) => {
+        if (placeholder) {
+          img.remove();
+          if (isBrand) showFallback();
+          return;
+        }
+        // 图片可能在 cell 挂进 DOM 之前就完成（缓存命中）；这里不要用 isConnected 拦截，
+        // 否则迟到的 load 已经不会再触发，兜底文字会一直压在透明图标下面。
+        if (!isBrand) {
+          Array.from(cell.childNodes).forEach((child) => {
+            if (child.nodeType === Node.TEXT_NODE) child.remove();
+          });
+        }
+      });
     };
     img.addEventListener('load', reveal, { once: true });
     img.addEventListener(

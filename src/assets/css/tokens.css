@@ -35,14 +35,14 @@ html {
   --radius-lg: 24px;
   --radius-xl: 30px;
   --icon-size: 72px;
-  --grid-gap: 36px;
+  --grid-gap: 48px;
   --grid-cols: 6;
   --cell: 88px;
   --font-scale: 1;
 
   /* 内容列宽：搜索框、图标网格、列表型风格共用同一列，保证左边缘对齐。
      JS 会按「列数 × 单元宽 + 间隙」算出真实值。 */
-  --dock-w: 708px;
+  --dock-w: 768px;
   --list-w: clamp(420px, var(--dock-w), 780px);
   /* 搜索框与图标网格同宽，但保留 420px 下限：列数调小时不至于窄到没法用 */
   --search-w: min(clamp(420px, var(--dock-w), 100%), 100%);

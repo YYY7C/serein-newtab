@@ -695,7 +695,7 @@ html[data-tone='light'] .clock {
   justify-content: center;
   align-content: start;
   /* 行距略小于列距：标签本身已占掉一段纵向留白，两者视觉上才等距 */
-  gap: calc(var(--grid-gap) * 0.78) var(--grid-gap);
+  gap: calc(var(--grid-gap) * 0.9) var(--grid-gap);
   width: 100%;
   max-width: calc(var(--grid-cols) * var(--cell) + (var(--grid-cols) - 1) * var(--grid-gap));
 }
@@ -716,7 +716,7 @@ html[data-tone='light'] .clock {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   padding: 2px;
   /* 网格项自成布局上下文：重排不会波及整页，标签溢出也不影响邻居 */
   contain: layout style;

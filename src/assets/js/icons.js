@@ -230,6 +230,98 @@ export function faviconUrl(url, size = 128) {
   return result;
 }
 
+/* ------------------------------------------------------------ 占位图识别 */
+
+/**
+ * chrome 的 `_favicon` 接口在拿不到真实 favicon 时，会返回同一张灰地球占位图。
+ * 它渲染出来只是一个灰色疙瘩，用户读作「图标没渲染出来」。这里取一次那张占位图
+ * 当参考签名，再把候选 favicon 缩到 16×16 与之比对：命中就当作「没有图标」，
+ * 由调用方退回字符徽标。
+ */
+const PLACEHOLDER_PROBE_URL = 'https://lumen-placeholder.invalid/';
+const SIGNATURE_SIZE = 16;
+/** 逐通道平均差（0–255）；同一张图缩放后差异为 0，留一点余量给合成器的小抖动 */
+const SIGNATURE_TOLERANCE = 6;
+
+const placeholderMemo = new Map();
+const knownPlaceholders = new Set();
+
+/** `_favicon` 接口的 URL 里一定带这一段；只有它返回的图才可能是那张通用占位图 */
+const FAVICON_PATH_HINT = '/_favicon/';
+
+/** 已确认是占位图的 src，可同步跳过 */
+export function isKnownPlaceholder(src) {
+  return Boolean(src) && knownPlaceholders.has(src);
+}
+
+function signatureOf(image) {
+  if (typeof document === 'undefined' || !image?.naturalWidth) return null;
+  const canvas = document.createElement('canvas');
+  canvas.width = SIGNATURE_SIZE;
+  canvas.height = SIGNATURE_SIZE;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return null;
+  ctx.clearRect(0, 0, SIGNATURE_SIZE, SIGNATURE_SIZE);
+  ctx.drawImage(image, 0, 0, SIGNATURE_SIZE, SIGNATURE_SIZE);
+  try {
+    return ctx.getImageData(0, 0, SIGNATURE_SIZE, SIGNATURE_SIZE).data;
+  } catch {
+    // 跨域污染（非扩展页面调试时可能出现）：放弃判断，按正常图标处理
+    return null;
+  }
+}
+
+function sameSignature(a, b) {
+  if (!a || !b || a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i += 1) diff += Math.abs(a[i] - b[i]);
+  return diff / a.length <= SIGNATURE_TOLERANCE;
+}
+
+let placeholderSignature = null;
+
+function loadPlaceholderSignature() {
+  if (placeholderSignature) return placeholderSignature;
+  placeholderSignature = new Promise((resolve) => {
+    const url = faviconUrl(PLACEHOLDER_PROBE_URL);
+    if (!url) {
+      resolve(null);
+      return;
+    }
+    const probe = new Image();
+    probe.decoding = 'async';
+    probe.addEventListener('load', () => resolve(signatureOf(probe)), { once: true });
+    probe.addEventListener('error', () => resolve(null), { once: true });
+    probe.src = url;
+  });
+  return placeholderSignature;
+}
+
+/**
+ * 判断一张已经 load 完成的图片是不是 `_favicon` 的通用占位图。
+ * @param {HTMLImageElement} image
+ * @returns {Promise<boolean>}
+ */
+export function isFaviconPlaceholder(image) {
+  const src = image?.currentSrc || image?.src || '';
+  // 本地品牌 SVG、用户自定义的 emoji/文字/图片都不可能是灰地球，省掉一次画布采样
+  if (src && !src.includes(FAVICON_PATH_HINT)) return Promise.resolve(false);
+  const own = signatureOf(image);
+  if (!own) return Promise.resolve(false);
+  if (!src) return loadPlaceholderSignature().then((ref) => sameSignature(own, ref));
+  const cached = placeholderMemo.get(src);
+  if (cached) return cached;
+  const task = loadPlaceholderSignature().then((ref) => {
+    // 参考图取不到时不记忆结论，下次还有机会重判
+    if (!ref && placeholderMemo.get(src) === task) placeholderMemo.delete(src);
+    const hit = sameSignature(own, ref);
+    if (hit) knownPlaceholders.add(src);
+    return hit;
+  });
+  placeholderMemo.set(src, task);
+  return task;
+}
+
 /* ---------------------------------------------------------------- 解析 */
 
 /**
