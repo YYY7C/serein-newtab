@@ -7,7 +7,7 @@ import { uid, normalizeUrl, isUsableUrl, isSafeImageUrl } from './util.js';
 export const APP = {
   name: 'Lumen',
   subtitle: '新标签页',
-  version: '1.1.4',
+  version: '1.1.5',
   schema: 1,
 };
 
@@ -22,6 +22,8 @@ const GRID_DEFAULTS_VERSION = 4;
 /** 历史出现过的默认间距：迁移时只要还停在这些值上，就说明用户没自己调过 */
 const LEGACY_GAPS = new Set([20, 28, 36]);
 const DEFAULT_GAP = 48;
+/** 行距默认比列距紧一点：标签本身已占掉一段纵向留白，两者视觉上才等距 */
+const DEFAULT_GAP_Y = 43;
 
 /* --------------------------------------------------------------- 壁纸预设 */
 
@@ -289,7 +291,8 @@ export function createDefaultState() {
         blur: 0,
         brightness: 100,
         saturate: 100,
-        veil: 0,
+        /** 每种风格各自的遮罩强度（0–100），缺省时用该风格的预设值 */
+        veilByStyle: {},
         vignette: true,
         tone: 'auto',
       },
@@ -298,6 +301,7 @@ export function createDefaultState() {
         columns: 6,
         iconSize: 72,
         gap: DEFAULT_GAP,
+        gapY: DEFAULT_GAP_Y,
         showClock: true,
         clock24: true,
         showSeconds: false,
@@ -532,10 +536,10 @@ export function migrate(raw) {
     ['config.layout', 'columns', 3, 14],
     ['config.layout', 'iconSize', 40, 96],
     ['config.layout', 'gap', 4, 64],
+    ['config.layout', 'gapY', 4, 64],
     ['config.background', 'blur', 0, 30],
     ['config.background', 'brightness', 30, 150],
     ['config.background', 'saturate', 0, 200],
-    ['config.background', 'veil', 0, 90],
   ];
   for (const [path, key, min, max] of numeric) {
     const parts = path.split('.');
@@ -551,6 +555,10 @@ export function migrate(raw) {
   }
   // CSS grid-template-columns 的 repeat() 只接受整数，手工导入的 6.5 会让整个网格失效
   merged.config.layout.columns = Math.round(merged.config.layout.columns);
+  // 行距是后加的独立字段：老数据没有它，就按当时的列距 × 0.9 换算，保持原有观感
+  if (!Number.isFinite(toFiniteNumber(raw.config?.layout?.gapY))) {
+    merged.config.layout.gapY = Math.round(merged.config.layout.gap * 0.9);
+  }
 
   if (!STYLES.some((style) => style.id === merged.config.style)) merged.config.style = defaults.config.style;
   if (!['gradient', 'bing', 'url', 'file', 'color'].includes(merged.config.background.type)) {
@@ -580,6 +588,22 @@ export function migrate(raw) {
     merged.config.background.url = '';
   }
   if (typeof merged.config.background.fileId !== 'string') merged.config.background.fileId = '';
+  {
+    // 遮罩强度按风格分别记忆；旧版本只有一个全局 veil，迁移时落到当时的风格上
+    const rawBg = isPlainObject(raw.config?.background) ? raw.config.background : {};
+    const rawMap = isPlainObject(rawBg.veilByStyle) ? rawBg.veilByStyle : {};
+    const legacyVeil = toFiniteNumber(rawBg.veil);
+    const map = {};
+    for (const style of STYLES) {
+      const value = toFiniteNumber(rawMap[style.id]);
+      if (Number.isFinite(value)) map[style.id] = Math.min(100, Math.max(0, Math.round(value)));
+    }
+    if (!Object.keys(map).length && Number.isFinite(legacyVeil) && legacyVeil > 0) {
+      map[merged.config.style] = Math.min(100, Math.max(0, Math.round(legacyVeil)));
+    }
+    merged.config.background.veilByStyle = map;
+    delete merged.config.background.veil;
+  }
   {
     const rawBing = isPlainObject(merged.config.background.bing) ? merged.config.background.bing : {};
     const bingIdx = toFiniteNumber(rawBing.idx);

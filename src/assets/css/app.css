@@ -694,8 +694,8 @@ html[data-tone='light'] .clock {
   grid-template-columns: repeat(auto-fit, var(--cell));
   justify-content: center;
   align-content: start;
-  /* 行距略小于列距：标签本身已占掉一段纵向留白，两者视觉上才等距 */
-  gap: calc(var(--grid-gap) * 0.9) var(--grid-gap);
+  /* 行距/列距独立可调：分别落到 --grid-gap-y / --grid-gap */
+  gap: var(--grid-gap-y) var(--grid-gap);
   width: 100%;
   max-width: calc(var(--grid-cols) * var(--cell) + (var(--grid-cols) - 1) * var(--grid-gap));
 }

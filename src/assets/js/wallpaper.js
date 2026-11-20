@@ -2,7 +2,7 @@
  *
  * 负责三件事：
  *   1. 解析 background 配置 -> 真实可渲染的层（渐变 / 图片 / 必应每日 / 纯色）
- *   2. 把 blur / brightness / saturate / veil 落到 CSS 变量与内联样式
+ *   2. 把 blur / brightness / saturate 与逐风格遮罩强度落到 CSS 变量与内联样式
  *   3. 自动判定文字色调（tone），让浅色壁纸上也能看清
  */
 
@@ -153,9 +153,19 @@ function setGradientFallback(bg) {
   return { tone: preset.tone, kind: 'gradient', fallback: true };
 }
 
-/** 背景遮罩下限：列表型/材质型风格需要压住壁纸，保证表面干净；原色风格则完全不压
- *  白纸保留约 1/4 的壁纸，压成一层暖灰纸纹，而不是把所有图片都洗成一片白。 */
-const STYLE_VEIL = { glass: 0, native: 0, noir: 0.8, paper: 0.75, editorial: 0.93, terminal: 0.94 };
+/** 每种风格的默认遮罩强度（%）：材质/纸面型风格要靠它压住壁纸，保证表面干净；
+ *  原色与玻璃则完全不压。设置页可逐风格覆盖，值存在 background.veilByStyle。
+ *  白纸只压到 75%，保留约 1/4 的壁纸，做成一层暖灰纸纹而不是一片白。 */
+export const STYLE_VEIL = { glass: 0, native: 0, noir: 80, paper: 75, editorial: 93, terminal: 94 };
+
+/** 当前风格实际生效的遮罩强度（0–100）：用户覆盖优先，否则用该风格的预设值 */
+export function styleVeilPercent(bg, style) {
+  const override = bg?.veilByStyle?.[style];
+  if (typeof override === 'number' && Number.isFinite(override)) {
+    return Math.min(100, Math.max(0, Math.round(override)));
+  }
+  return STYLE_VEIL[style] ?? 0;
+}
 
 /** 透出来的壁纸还要褪色：白纸上是「印在纸上的照片」，不是彩色幻灯片 */
 const STYLE_SATURATE = { paper: 0.45 };
@@ -172,8 +182,7 @@ function applyFilters(bg) {
   mediaEl.style.filter = filters.join(' ');
   mediaEl.style.transform = bg.blur > 0 ? 'scale(1.09)' : '';
 
-  const floor = STYLE_VEIL[style] ?? 0;
-  veilEl.style.opacity = String(Math.max(Math.max(0, bg.veil) / 100, floor));
+  veilEl.style.opacity = String(styleVeilPercent(bg, style) / 100);
 }
 
 /* ------------------------------------------------------------------ 必应 */

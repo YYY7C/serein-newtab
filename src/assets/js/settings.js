@@ -7,7 +7,7 @@ import { h, clear, svgIcon, bus, debounce, relativeTime, formatBytes, normalizeU
 import * as store from './store.js';
 import { makeSwitch, makeSegmented, makeRange, makeStepper, shortcutEditor, confirmDialog, openModal } from './modals.js';
 import { GRADIENTS, ENGINES, engineById, APP, STYLES, styleById } from './defaults.js';
-import { applyBackground, applyBackgroundLook, cycleBing, fetchBingGallery, saveLocalWallpaper } from './wallpaper.js';
+import { applyBackground, applyBackgroundLook, cycleBing, fetchBingGallery, saveLocalWallpaper, styleVeilPercent, STYLE_VEIL } from './wallpaper.js';
 import { applyConfig, dockWidth } from './theme.js';
 import { exportState, importState, resetAll, usageReport } from './data.js';
 import { refreshClock } from './clock.js';
@@ -757,6 +757,48 @@ function buildWallpaper() {
     );
   }
 
+  /* 遮罩强度按风格记忆：白纸/暗色材质各有自己的白雾或黑雾底线，
+     用户在这里调低就能透出更多壁纸，其它风格保留各自的值。 */
+  const styleId = config.style;
+  const styleName = styleById(styleId).name;
+  const veilInactive = styleId === 'editorial' || styleId === 'terminal';
+  const veilDefault = STYLE_VEIL[styleId] ?? 0;
+  const veilHint = veilInactive
+    ? `「${styleName}」用整页实底铺满，遮罩不参与渲染`
+    : `「${styleName}」默认 ${veilDefault}%，各风格分别记忆；调低可透出更多壁纸`;
+  const veilRange = makeRange({
+    min: 0,
+    max: 100,
+    value: styleVeilPercent(bg, styleId),
+    format: (value) => `${value}%`,
+    onInput: (value) => {
+      bg.veilByStyle = { ...bg.veilByStyle, [styleId]: value };
+      applyBackgroundLook(store.state);
+      touch();
+    },
+  });
+  const veilReset = h('button', {
+    class: 'btn',
+    type: 'button',
+    'aria-label': '恢复当前风格的默认遮罩强度',
+    title: '恢复当前风格的默认遮罩强度',
+    html: `${svgIcon('refresh', 13)}<span>默认</span>`,
+    onclick: () => {
+      const next = { ...bg.veilByStyle };
+      delete next[styleId];
+      bg.veilByStyle = next;
+      veilRange.querySelector('input').value = String(veilDefault);
+      veilRange.querySelector('.value').textContent = `${veilDefault}%`;
+      applyBackgroundLook(store.state);
+      touch();
+    },
+  });
+  if (veilInactive) {
+    // 这两个风格用整页实底，遮罩被 CSS 隐藏；留着可点只会让人以为没生效
+    veilRange.querySelector('input').disabled = true;
+    veilReset.disabled = true;
+  }
+
   return h(
     'div',
     {},
@@ -810,19 +852,9 @@ function buildWallpaper() {
         })
       ),
       row(
-        '遮罩浓度',
-        '壁纸太花时压低对比，文字更好读',
-        makeRange({
-          min: 0,
-          max: 90,
-          value: bg.veil,
-          format: (value) => `${value}%`,
-          onInput: (value) => {
-            bg.veil = value;
-            applyBackgroundLook(store.state);
-            touch();
-          },
-        })
+        '风格遮罩',
+        veilHint,
+        [veilRange, veilReset]
       ),
       row(
         '暗角',
@@ -946,16 +978,30 @@ function buildLayout() {
         })
       ),
       row(
-        '图标间距',
-        '',
+        '列间距',
+        '决定内容总宽：网格与搜索框同宽，改这一项两者一起变',
         makeRange({
-          min: 8,
+          min: 4,
           max: 64,
           value: layout.gap,
           format: (value) => `${value}px`,
           onInput: (value) => {
             layout.gap = value;
             columnsHint.textContent = describeColumns(layout.columns);
+            touch();
+          },
+        })
+      ),
+      row(
+        '行间距',
+        '行与行之间的垂直留白，与列间距互不影响',
+        makeRange({
+          min: 4,
+          max: 64,
+          value: layout.gapY,
+          format: (value) => `${value}px`,
+          onInput: (value) => {
+            layout.gapY = value;
             touch();
           },
         })

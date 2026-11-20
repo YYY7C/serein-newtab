@@ -36,6 +36,7 @@ html {
   --radius-xl: 30px;
   --icon-size: 72px;
   --grid-gap: 48px;
+  --grid-gap-y: 43px;
   --grid-cols: 6;
   --cell: 88px;
   --font-scale: 1;

@@ -43,6 +43,7 @@ export function cellSize(iconSize) {
 export function dockWidth(layout = {}) {
   const iconSize = clamp(layout.iconSize ?? 60, 40, 96);
   const columns = Math.round(clamp(layout.columns ?? 6, 3, 14));
+  // 内容总宽只由列距决定，行距不参与
   const gap = clamp(layout.gap ?? 20, 4, 64);
   return Math.round(columns * cellSize(iconSize) + (columns - 1) * gap);
 }
@@ -76,8 +77,11 @@ export function applyConfig(state) {
   const columns = Math.round(clamp(layout.columns ?? 6, 3, 14));
   const gap = clamp(layout.gap ?? 20, 4, 64);
   const cell = cellSize(iconSize);
+  // 行距是独立字段，缺省时沿用旧版「列距 × 0.9」的观感
+  const gapY = clamp(layout.gapY ?? Math.round(gap * 0.9), 4, 64);
   style.setProperty('--icon-size', `${iconSize}px`);
   style.setProperty('--grid-gap', `${gap}px`);
+  style.setProperty('--grid-gap-y', `${gapY}px`);
   style.setProperty('--grid-cols', String(columns));
   style.setProperty('--cell', `${cell}px`);
   style.setProperty('--dock-w', `${dockWidth(layout)}px`);
