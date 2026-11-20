@@ -8,7 +8,7 @@
 | 类别 | 图标 | 来源 / 许可 |
 | --- | --- | --- |
 | 单色字形 | baidu、bilibili、zhihu、github、youtube 等约 70 个 | 取自 [Simple Icons](https://simpleicons.org)，该图标集以 **CC0 1.0** 释出；本项目把它们重新排进 48×48 的白底方块，并按各品牌官方色上色 |
-| 多色 / 手绘 | `google`、`figma`、`instagram`、`microsoft`、`bing`、`jd`、`douyin`、`deepseek` | 本项目按品牌公开标识自行绘制的简化几何图形 |
+| 多色 / 手绘 | `google`、`figma`、`instagram`、`microsoft`、`bing`、`jd`、`douyin`、`deepseek`、`sspai` | 本项目按品牌公开标识自行绘制的简化几何图形；`sspai` 的字形取自少数派官网首页内联 SVG 标识 |
 
 ## 商标
 

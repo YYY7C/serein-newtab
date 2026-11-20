@@ -7,15 +7,16 @@ import { uid, normalizeUrl, isUsableUrl, isSafeImageUrl } from './util.js';
 export const APP = {
   name: 'Lumen',
   subtitle: '新标签页',
-  version: '1.1.2',
+  version: '1.1.3',
   schema: 1,
 };
 
 /**
  * 布局默认值版本。只在「默认网格」发生需要迁移的变化时 +1：
- * v2 把默认图标从 60px 放大到 72px、间距从 20px 放宽到 28px。
+ * v2 把默认图标从 60px 放大到 72px、间距从 20px 放宽到 28px；
+ * v3 把默认间距再从 28px 放宽到 36px，缓解图标之间的拥挤感。
  */
-const GRID_DEFAULTS_VERSION = 2;
+const GRID_DEFAULTS_VERSION = 3;
 
 /* --------------------------------------------------------------- 壁纸预设 */
 
@@ -291,7 +292,7 @@ export function createDefaultState() {
       layout: {
         columns: 6,
         iconSize: 72,
-        gap: 28,
+        gap: 36,
         showClock: true,
         clock24: true,
         showSeconds: false,
@@ -425,6 +426,10 @@ export function migrate(raw) {
     if (layout && layout.columns === 6 && layout.iconSize === 60 && layout.gap === 20) {
       layout.iconSize = 72;
       layout.gap = 28;
+    }
+    // v3：间距从 28px 放宽到 36px，只迁移仍停在 v2 默认值上的用户
+    if (layout && layout.columns === 6 && layout.iconSize === 72 && layout.gap === 28) {
+      layout.gap = 36;
     }
   }
   merged.meta.defaultsVersion = Math.max(previousDefaults, GRID_DEFAULTS_VERSION);

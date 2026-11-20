@@ -40,6 +40,7 @@ export const BRAND_LOGOS = {
   '163.com': 'neteasecloudmusic',
   'music.163.com': 'neteasecloudmusic',
   'gitee.com': 'gitee',
+  'sspai.com': 'sspai',
 
   /* ---- 国际站点 ---- */
   'google.com': 'google',

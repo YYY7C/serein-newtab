@@ -695,7 +695,7 @@ html[data-tone='light'] .clock {
   justify-content: center;
   align-content: start;
   /* 行距略小于列距：标签本身已占掉一段纵向留白，两者视觉上才等距 */
-  gap: calc(var(--grid-gap) * 0.62) var(--grid-gap);
+  gap: calc(var(--grid-gap) * 0.78) var(--grid-gap);
   width: 100%;
   max-width: calc(var(--grid-cols) * var(--cell) + (var(--grid-cols) - 1) * var(--grid-gap));
 }
@@ -875,7 +875,8 @@ html[data-tone='light'] .clock {
 }
 
 .tile-label {
-  max-width: calc(var(--icon-size) + 26px);
+  /* 不超出所在列宽：标签一旦比单元格还宽，就会挤进左右邻居的间隙里 */
+  max-width: calc(var(--cell) - 6px);
   font-size: 12.5px;
   font-weight: 500;
   line-height: 1.25;
