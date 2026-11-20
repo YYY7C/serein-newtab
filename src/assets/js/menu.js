@@ -1,4 +1,4 @@
-/* Lumen · 右键菜单 / 下拉菜单
+/* Serein · 右键菜单 / 下拉菜单
  * 单例：同一时间只存在一个菜单，点击外部自动关闭。
  */
 
@@ -156,7 +156,7 @@ export function closeMenu() {
   try {
     done?.();
   } catch (err) {
-    console.warn('[lumen/menu] onClose 异常', err);
+    console.warn('[serein/menu] onClose 异常', err);
   }
 }
 

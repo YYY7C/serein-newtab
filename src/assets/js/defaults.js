@@ -1,13 +1,13 @@
-/* Lumen · 默认状态与常量
+/* Serein · 默认状态与常量
  * 数据模型一旦确定，其余模块只读它 + 通过 store 修改它。
  */
 
 import { uid, normalizeUrl, isUsableUrl, isSafeImageUrl } from './util.js';
 
 export const APP = {
-  name: 'Lumen',
+  name: 'Serein',
   subtitle: '新标签页',
-  version: '1.1.5',
+  version: '1.2.0',
   schema: 1,
 };
 

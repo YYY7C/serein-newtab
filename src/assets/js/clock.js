@@ -1,4 +1,4 @@
-/* Lumen · 时钟与日期 */
+/* Serein · 时钟与日期 */
 
 import { $, svgIcon } from './util.js';
 import { describeDate, WEEKDAYS } from './lunar.js';

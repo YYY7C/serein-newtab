@@ -1,4 +1,4 @@
-/* Lumen · 基础工具层
+/* Serein · 基础工具层
  * 无任何第三方依赖：DOM 构造、事件总线、URL 归一化、颜色推导、图标片段。
  */
 
@@ -72,7 +72,7 @@ export const bus = (() => {
         try {
           fn(payload);
         } catch (err) {
-          console.error('[lumen/bus]', evt, err);
+          console.error('[serein/bus]', evt, err);
         }
       }
     },
@@ -253,7 +253,7 @@ function hslToHex(hue, sat, light) {
  * 同一域名永远得到同一颜色，保证刷新后视觉稳定。
  */
 export function domainPalette(seed) {
-  const hash = hashString(String(seed || 'lumen'));
+  const hash = hashString(String(seed || 'serein'));
   const hue = hash % 360;
   const hue2 = (hue + 26 + (hash % 18)) % 360;
   return {

@@ -1,6 +1,6 @@
 @charset "UTF-8";
 /* ============================================================================
-   Lumen · 主体布局
+   Serein · 主体布局
    ========================================================================== */
 
 /* ---------------------------------------------------------------- 背景层 */
@@ -154,89 +154,13 @@ html[data-scale='1'] .stage {
   gap: 10px;
 }
 
-/* 侧边栏在右侧时，右侧按钮与侧栏卡片右缘齐平；
-   在左侧时，品牌字让出侧栏宽度。两者都不再受中间内容列宽度约束。 */
+/* 侧边栏在右侧时，右侧按钮与侧栏卡片右缘齐平，不受中间内容列宽度约束 */
 html[data-sidebar='right'] .topbar {
   padding-right: 20px;
 }
 
-html[data-sidebar='left'] .topbar-left {
-  padding-left: calc(var(--sidebar-w) + clamp(4px, 0.6vw, 14px));
-}
-
-/* ------------------------------------------------------------ 品牌字标 */
-
-.brand {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 0;
-  user-select: none;
-  isolation: isolate;
-}
-
-/* 背景里的一团柔光，让字标「嵌」在壁纸上而不是浮在上面 */
-.brand::before {
-  content: '';
-  position: absolute;
-  z-index: -1;
-  inset: -30px -42px -26px -34px;
-  border-radius: 50%;
-  background: radial-gradient(
-    60% 60% at 34% 50%,
-    color-mix(in srgb, var(--accent) 46%, transparent) 0%,
-    transparent 76%
-  );
-  opacity: 0.55;
-  filter: blur(18px);
-  pointer-events: none;
-}
-
-.brand-word {
-  font-family: var(--font-sans);
-  font-size: clamp(17px, 1.65vw, 22px);
-  font-weight: 300;
-  line-height: 1;
-  letter-spacing: 0.3em;
-  text-transform: uppercase;
-  padding-left: 0.04em;
-  background: linear-gradient(
-    104deg,
-    rgba(255, 255, 255, 0.7) 0%,
-    #ffffff 24%,
-    color-mix(in srgb, var(--accent) 62%, #ffffff) 62%,
-    rgba(255, 255, 255, 0.82) 100%
-  );
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  -webkit-text-fill-color: transparent;
-  filter: drop-shadow(0 1px 10px rgba(0, 0, 0, 0.34));
-}
-
-html[data-tone='light'] .brand::before {
-  background: radial-gradient(
-    60% 60% at 34% 50%,
-    color-mix(in srgb, var(--accent) 26%, transparent) 0%,
-    transparent 76%
-  );
-  opacity: 0.4;
-}
-
-html[data-tone='light'] .brand-word {
-  background: linear-gradient(
-    104deg,
-    rgba(12, 14, 20, 0.62) 0%,
-    rgba(10, 12, 18, 0.94) 26%,
-    color-mix(in srgb, var(--accent) 76%, #10131c) 68%,
-    rgba(12, 14, 20, 0.7) 100%
-  );
-  -webkit-background-clip: text;
-  background-clip: text;
-  filter: drop-shadow(0 1px 4px rgba(255, 255, 255, 0.34));
-}
-
 .chip {
+  display: inline-flex;
   display: inline-flex;
   align-items: center;
   gap: 8px;

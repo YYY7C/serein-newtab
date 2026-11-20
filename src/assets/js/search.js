@@ -1,4 +1,4 @@
-/* Lumen · 搜索框
+/* Serein · 搜索框
  *
  * 能力：多引擎切换 / 网址直开 / 本地快捷方式匹配 / 远程联想 / 键盘导航。
  * 注意：扩展从不修改浏览器的默认搜索引擎（那样会触发商店审核问题），
@@ -280,7 +280,7 @@ const requestSuggest = debounce(async (query) => {
     if (err.name === 'AbortError') return;
     if (latestQuery !== query || epoch !== suggestEpoch) return;
     // 失败时保留已经渲染好的本地结果与当前选中项，不要无谓重绘
-    console.warn('[lumen/search] 联想失败', err);
+    console.warn('[serein/search] 联想失败', err);
   }
 }, 170);
 
@@ -723,7 +723,7 @@ function globalHotkeys(event) {
     event.preventDefault();
     closeMenu();
     if (!document.querySelector('.modal.is-open') && document.documentElement.dataset.overlay !== 'settings') {
-      document.dispatchEvent(new CustomEvent('lumen:open-settings'));
+      document.dispatchEvent(new CustomEvent('serein:open-settings'));
     }
     return;
   }

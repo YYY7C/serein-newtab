@@ -1,4 +1,4 @@
-/* Lumen · 天气
+/* Serein · 天气
  *
  * 数据源：Open-Meteo（无需 API Key、跨域开放）。
  * 注意：其免费层仅供非商业用途；若将来商用需替换为 QWeather 等服务。
@@ -195,7 +195,7 @@ export async function refreshWeather(state, { force = false } = {}) {
     setWeather({ cache, updatedAt: Date.now(), error: '' });
     return cache;
   } catch (err) {
-    console.warn('[lumen/weather] 获取失败', err);
+    console.warn('[serein/weather] 获取失败', err);
     if (stillCurrent()) setWeather({ error: String(err.message || err).slice(0, 200) });
     return state.weather.cache || null;
   }
@@ -232,7 +232,7 @@ export async function searchCity(query) {
       })
       .filter(Boolean);
   } catch (err) {
-    console.warn('[lumen/weather] 城市搜索失败', err);
+    console.warn('[serein/weather] 城市搜索失败', err);
     return [];
   }
 }

@@ -1,6 +1,6 @@
 @charset "UTF-8";
 /* ============================================================================
-   Lumen · 视觉风格覆盖层
+   Serein · 视觉风格覆盖层
    ----------------------------------------------------------------------------
    html[data-style="glass"] 使用 base CSS，不在此覆盖。
    其余三套是完整的表层语言替换：色彩体系、表面材质、版面网格、图标呈现方式。
@@ -97,19 +97,6 @@ html[data-style='noir'] .search.is-focused {
 html[data-style='noir'] .engine-btn,
 html[data-style='noir'] .search-submit {
   border-radius: 9px;
-}
-
-html[data-style='noir'] .brand::before {
-  opacity: 0.42;
-}
-
-html[data-style='noir'] .brand-word {
-  font-weight: 300;
-  letter-spacing: 0.32em;
-  background: none;
-  -webkit-text-fill-color: currentColor;
-  color: rgba(255, 255, 255, 0.94);
-  filter: none;
 }
 
 html[data-style='noir'] .icon-btn.glass {
@@ -408,25 +395,7 @@ html[data-style='paper'] .folder-mini .empty {
   background: #ffffff;
 }
 
-/* ---- 排版：字标与数字 ---- */
-
-html[data-style='paper'] .brand::before {
-  background: radial-gradient(
-    60% 60% at 34% 50%,
-    color-mix(in srgb, var(--accent) 16%, transparent) 0%,
-    transparent 76%
-  );
-  opacity: 0.5;
-}
-
-html[data-style='paper'] .brand-word {
-  font-weight: 400;
-  letter-spacing: 0.34em;
-  background: none;
-  -webkit-text-fill-color: currentColor;
-  color: #1d1a15;
-  filter: none;
-}
+/* ---- 排版：数字 ---- */
 
 html[data-style='paper'] .clock {
   font-family: var(--font-display);
@@ -673,10 +642,6 @@ html[data-style='native'] .clock {
 html[data-style='native'] .greeting,
 html[data-style='native'] .dateline {
   text-shadow: 0 1px 8px rgba(0, 0, 0, 0.5);
-}
-
-html[data-style='native'] .brand-word {
-  filter: drop-shadow(0 1px 12px rgba(0, 0, 0, 0.45));
 }
 
 html[data-style='native'][data-tone='light'] .clock {
@@ -1178,35 +1143,6 @@ html[data-style='editorial'] .notes-area {
 }
 
 /* ---- 顶栏 ---- */
-
-/* 编辑排版：衬线字标，字距收紧，像杂志刊头 */
-html[data-style='editorial'] .brand::before {
-  inset: -22px -26px;
-  opacity: 0.22;
-}
-
-html[data-style='editorial'] .brand-word {
-  font-family: var(--font-display, Georgia, 'Songti SC', serif);
-  font-size: clamp(20px, 2vw, 27px);
-  font-weight: 500;
-  font-style: normal;
-  letter-spacing: 0.02em;
-  text-transform: none;
-  padding-left: 0;
-  /* 编辑排版的纸面永远是浅色，这里的字标不跟 data-tone 走 */
-  background: linear-gradient(
-    104deg,
-    rgba(16, 18, 24, 0.5) 0%,
-    rgba(12, 14, 20, 0.9) 30%,
-    color-mix(in srgb, var(--accent) 58%, #1b1d26) 72%,
-    rgba(16, 18, 24, 0.58) 100%
-  );
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  -webkit-text-fill-color: transparent;
-  filter: none;
-}
 
 html[data-style='editorial'] .icon-btn.glass {
   width: 34px;
@@ -1787,47 +1723,6 @@ html[data-style='terminal'] .icon-btn.glass {
   box-shadow: none;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-}
-
-/* 终端：等宽大写 + 光标块，像命令行提示符 */
-html[data-style='terminal'] .brand::before {
-  inset: -18px -20px;
-  opacity: 0.16;
-  filter: blur(12px);
-}
-
-html[data-style='terminal'] .brand-word {
-  font-family: var(--mono);
-  font-size: 14px;
-  font-weight: 500;
-  letter-spacing: 0.16em;
-  background: none;
-  -webkit-text-fill-color: currentColor;
-  color: var(--accent);
-  filter: none;
-}
-
-html[data-style='terminal'] .brand-word::after {
-  content: '';
-  display: inline-block;
-  width: 0.46em;
-  height: 0.86em;
-  margin-left: 0.18em;
-  transform: translateY(0.08em);
-  background: var(--accent);
-  opacity: 0.72;
-  animation: term-caret 1.15s steps(1, end) infinite;
-}
-
-@keyframes term-caret {
-  0%,
-  46% {
-    opacity: 0.72;
-  }
-  54%,
-  100% {
-    opacity: 0;
-  }
 }
 
 html[data-style='terminal'] .icon-btn.glass.is-active {

@@ -1,4 +1,4 @@
-/* Lumen · 启动入口
+/* Serein · 启动入口
  *
  * 顺序刻意如此：先落主题变量与壁纸（首屏立刻有正确的底色与文字对比），
  * 再挂各功能模块，最后做一次持久化存储请求。
@@ -68,13 +68,13 @@ async function openSettings(tab) {
     settingsModule ||= await import('./settings.js');
     settingsModule.open(tab);
   } catch (err) {
-    console.error('[lumen] 设置面板加载失败', err);
+    console.error('[serein] 设置面板加载失败', err);
     showToast({ text: '设置面板加载失败，请刷新页面', error: true });
   }
 }
 
 bus.on('openSettings', (payload) => openSettings(payload?.tab));
-document.addEventListener('lumen:open-settings', () => openSettings());
+document.addEventListener('serein:open-settings', () => openSettings());
 
 /* --------------------------------------------------------------- 顶栏 */
 
@@ -197,8 +197,8 @@ function boot() {
     showToast({ text: '检测到本地缓存被清理，已从镜像恢复你的配置' });
   });
 
-  if (!sessionStorage.getItem('lumen:greeted')) {
-    sessionStorage.setItem('lumen:greeted', '1');
+  if (!sessionStorage.getItem('serein:greeted')) {
+    sessionStorage.setItem('serein:greeted', '1');
     setTimeout(() => showToast({ text: '右键图标或空白处，随时编辑' }), 900);
   }
 }

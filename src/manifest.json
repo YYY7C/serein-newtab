@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Lumen 新标签页",
-  "short_name": "Lumen",
-  "version": "1.1.5",
+  "name": "Serein 新标签页",
+  "short_name": "Serein",
+  "version": "1.2.0",
   "description": "自有新标签页：快捷方式网格、文件夹、天气、待办、便签、每日壁纸与深度外观自定义。无账号、无云端、无联盟链接。",
   "chrome_url_overrides": {
     "newtab": "newtab.html"
@@ -25,7 +25,7 @@
     "https://geocoding-api.open-meteo.com/*"
   ],
   "action": {
-    "default_title": "打开 Lumen 新标签页",
+    "default_title": "打开 Serein 新标签页",
     "default_icon": {
       "16": "assets/img/icon-16.png",
       "32": "assets/img/icon-32.png",

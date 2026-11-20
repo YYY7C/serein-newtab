@@ -1,4 +1,4 @@
-/* Lumen · 农历
+/* Serein · 农历
  *
  * 纯前端、零依赖。核心是 1900–2100 的农历年编码表：
  *   位 0x0f        —— 闰月月份（0 表示无闰月）
@@ -143,7 +143,7 @@ function selfTest() {
       computed.getUTCMonth() !== m - 1 ||
       computed.getUTCDate() !== d
     ) {
-      console.warn('[lumen/lunar] 农历表校验未通过，年份：', year, computed.toISOString().slice(0, 10), iso);
+      console.warn('[serein/lunar] 农历表校验未通过，年份：', year, computed.toISOString().slice(0, 10), iso);
       return false;
     }
   }

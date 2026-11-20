@@ -1,4 +1,4 @@
-/* Lumen · 弹窗基座与常用对话框
+/* Serein · 弹窗基座与常用对话框
  *
  * 一个极简的「层」管理器：后开的弹窗永远在更上层，Esc 只关闭最上层。
  */
@@ -110,7 +110,7 @@ export function openModal(options) {
     try {
       onClose?.();
     } catch (err) {
-      console.error('[lumen/modal] onClose 异常', err);
+      console.error('[serein/modal] onClose 异常', err);
     }
 
     // 关闭上层弹窗后，把下层弹窗恢复为可交互

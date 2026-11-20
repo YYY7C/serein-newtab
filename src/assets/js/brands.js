@@ -1,4 +1,4 @@
-/* Lumen · 品牌图标索引
+/* Serein · 品牌图标索引
  *
  * host -> 内置矢量图标（assets/brand/<slug>.svg）。
  * 图标来源见 assets/brand/NOTICE.md；未收录的站点自动退回站点图标或字符徽标。

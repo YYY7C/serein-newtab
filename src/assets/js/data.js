@@ -1,4 +1,4 @@
-/* Lumen · 数据导入 / 导出 / 重置 */
+/* Serein · 数据导入 / 导出 / 重置 */
 
 import * as store from './store.js';
 import { files, assetUsage, clearLocal, clearChromeMirror, requestPersistentStorage } from './storage.js';
@@ -21,13 +21,13 @@ function download(filename, text) {
 
 export function exportState() {
   const payload = {
-    _format: 'lumen-export',
+    _format: 'serein-export',
     _version: APP.version,
     _exportedAt: new Date().toISOString(),
     state: store.state,
   };
   const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
-  download(`lumen-backup-${stamp}.json`, JSON.stringify(payload, null, 2));
+  download(`serein-backup-${stamp}.json`, JSON.stringify(payload, null, 2));
 }
 
 /* --------------------------------------------------------------- 导入 */
@@ -36,7 +36,7 @@ const MAX_IMPORT_BYTES = 8 * 1024 * 1024;
 
 export async function importState(file) {
   // 正常备份（不含上传图片）远小于 8 MB；挡住误选的超大文件，避免一次 JSON.parse 卡死新标签页
-  if (file.size > MAX_IMPORT_BYTES) throw new Error('备份文件超过 8 MB，可能不是 Lumen 的配置');
+  if (file.size > MAX_IMPORT_BYTES) throw new Error('备份文件超过 8 MB，可能不是 Serein 的配置');
   // Windows 记事本等编辑器可能给 UTF-8 文件加 BOM，JSON.parse 会因此失败
   const text = (await file.text()).replace(/^\uFEFF/, '');
   let parsed;
@@ -48,7 +48,7 @@ export async function importState(file) {
 
   const incoming = parsed?.state || parsed;
   if (!incoming || typeof incoming !== 'object') throw new Error('文件结构无法识别');
-  if (!Array.isArray(incoming.shortcuts)) throw new Error('缺少 shortcuts 字段，可能不是 Lumen 的备份');
+  if (!Array.isArray(incoming.shortcuts)) throw new Error('缺少 shortcuts 字段，可能不是 Serein 的备份');
 
   // 清洗：剔除不安全 URL 和非字符串 URL（后者只会在计数里造成虚高）
   const shortcuts = incoming.shortcuts.filter(

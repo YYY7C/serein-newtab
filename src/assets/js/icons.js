@@ -1,4 +1,4 @@
-/* Lumen · 图标解析
+/* Serein · 图标解析
  *
  * 解析顺序（每一级失败自动降级）：
  *   1. 用户自定义（emoji / 文字 / 图片 URL / 本地上传）
@@ -238,7 +238,7 @@ export function faviconUrl(url, size = 128) {
  * 当参考签名，再把候选 favicon 缩到 16×16 与之比对：命中就当作「没有图标」，
  * 由调用方退回字符徽标。
  */
-const PLACEHOLDER_PROBE_URL = 'https://lumen-placeholder.invalid/';
+const PLACEHOLDER_PROBE_URL = 'https://serein-placeholder.invalid/';
 const SIGNATURE_SIZE = 16;
 /** 逐通道平均差（0–255）；同一张图缩放后差异为 0，留一点余量给合成器的小抖动 */
 const SIGNATURE_TOLERANCE = 6;
@@ -339,7 +339,7 @@ export function resolveIcon(shortcut, { useFavicon = true, iconStyle = 'brand' }
   const value = shortcut?.iconValue || '';
 
   const brand = matchBrand(host);
-  const baseColor = brand ? brand[0] : domainPalette(host || title || 'lumen').solid;
+  const baseColor = brand ? brand[0] : domainPalette(host || title || 'serein').solid;
   const text = brand && brand[1] ? brand[1] : initialsOf(title, host);
 
   const fallback = {
@@ -421,7 +421,7 @@ export { brandSlugFor, brandLogoUrl };
 export function brandColorFor(url, title) {
   const host = hostOf(url);
   const brand = matchBrand(host);
-  return brand ? brand[0] : domainPalette(host || title || 'lumen').solid;
+  return brand ? brand[0] : domainPalette(host || title || 'serein').solid;
 }
 
 export function stableHue(seed) {

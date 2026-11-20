@@ -1,4 +1,4 @@
-/* Lumen · 壁纸与主题
+/* Serein · 壁纸与主题
  *
  * 负责三件事：
  *   1. 解析 background 配置 -> 真实可渲染的层（渐变 / 图片 / 必应每日 / 纯色）
@@ -229,7 +229,7 @@ async function applyBing(bg, token, fallbackCss = '') {
     return { tone: null, kind: 'image' };
   } catch (err) {
     if (token !== backgroundToken) return null;
-    console.warn('[lumen/bg] 必应壁纸获取失败，回落缓存或渐变', err);
+    console.warn('[serein/bg] 必应壁纸获取失败，回落缓存或渐变', err);
     // 离线/接口故障时优先显示昨天缓存的图；图片本身失败时仍有渐变兜底
     if (cached.url) {
       setImage(cached.url, true, fallbackCss);

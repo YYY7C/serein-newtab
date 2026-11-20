@@ -1,4 +1,4 @@
-/* Lumen · 设置面板
+/* Serein · 设置面板
  *
  * 全屏浮层 + 左侧分区导航。所有改动即时生效，无需「保存」按钮。
  */
@@ -1317,7 +1317,7 @@ async function importBookmarks() {
   try {
     await runBookmarkImport();
   } catch (err) {
-    console.error('[lumen/settings] 书签导入失败', err);
+    console.error('[serein/settings] 书签导入失败', err);
     bus.emit('toast', { text: '书签导入失败，请重试', error: true });
   } finally {
     bookmarkImporting = false;
@@ -1457,7 +1457,7 @@ function buildSearch() {
       h(
         'div',
         { class: 'info-block' },
-        'Lumen ',
+        'Serein ',
         h('strong', { text: '不会' }),
         ' 修改浏览器的默认搜索引擎。这里的引擎只决定你在本页输入内容后跳转到哪个搜索地址 —— 这是刻意设计：修改默认搜索引擎会触发应用商店的额外审核。'
       )

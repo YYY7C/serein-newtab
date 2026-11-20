@@ -1,4 +1,4 @@
-/* Lumen · 持久化层
+/* Serein · 持久化层
  *
  * 三条通道，各自负责合适的负载：
  *  1. localStorage  —— 全部结构化配置（同步读取，保证新标签页 0ms 首屏骨架）
@@ -8,8 +8,11 @@
  * 全部为本地存储：无账号、无云端、不发起任何上传。
  */
 
-const STATE_KEY = 'lumen.state.v1';
-const MIRROR_KEY = 'lumen.mirror.v1';
+const STATE_KEY = 'serein.state.v1';
+const MIRROR_KEY = 'serein.mirror.v1';
+/** 改名（Lumen → Serein）前的旧键：只用于一次性搬迁，搬完即删 */
+const LEGACY_STATE_KEY = 'lumen.state.v1';
+const LEGACY_MIRROR_KEY = 'lumen.mirror.v1';
 const MIRROR_INTERVAL = 5 * 60 * 1000; // 镜像最多 5 分钟写一次，避免无谓 IO
 
 /* ------------------------------------------------------------ localStorage */
@@ -17,11 +20,38 @@ const MIRROR_INTERVAL = 5 * 60 * 1000; // 镜像最多 5 分钟写一次，避�
 export function readLocal() {
   try {
     const raw = localStorage.getItem(STATE_KEY);
-    return raw ? JSON.parse(raw) : null;
+    if (raw) return JSON.parse(raw);
   } catch (err) {
-    console.warn('[lumen/storage] 读取失败', err);
+    console.warn('[serein/storage] 读取失败', err);
     return null;
   }
+  return adoptLegacyState();
+}
+
+/** 把旧键上的配置搬到新键：返回解析后的状态，搬迁失败也照样让页面用上旧数据 */
+function adoptLegacyState() {
+  let raw = null;
+  try {
+    raw = localStorage.getItem(LEGACY_STATE_KEY);
+  } catch {
+    return null;
+  }
+  if (!raw) return null;
+  let parsed = null;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    console.warn('[serein/storage] 旧配置损坏，未搬迁', err);
+    return null;
+  }
+  try {
+    localStorage.setItem(STATE_KEY, raw);
+    localStorage.removeItem(LEGACY_STATE_KEY);
+  } catch (err) {
+    // 写入失败（配额/隐私模式）：旧键保留，下次启动再试
+    console.warn('[serein/storage] 旧配置搬迁失败，本次仍用旧数据', err);
+  }
+  return parsed;
 }
 
 export function writeLocal(state) {
@@ -29,7 +59,7 @@ export function writeLocal(state) {
     localStorage.setItem(STATE_KEY, JSON.stringify(state));
     return true;
   } catch (err) {
-    console.error('[lumen/storage] 写入失败（可能超出配额）', err);
+    console.error('[serein/storage] 写入失败（可能超出配额）', err);
     return false;
   }
 }
@@ -37,6 +67,7 @@ export function writeLocal(state) {
 export function clearLocal() {
   try {
     localStorage.removeItem(STATE_KEY);
+    localStorage.removeItem(LEGACY_STATE_KEY);
   } catch {
     /* 忽略 */
   }
@@ -65,12 +96,28 @@ export function readChromeMirror() {
       return;
     }
     try {
-      local.get(MIRROR_KEY, (result) => {
+      local.get([MIRROR_KEY, LEGACY_MIRROR_KEY], (result) => {
         if (globalThis.chrome?.runtime?.lastError) {
           resolve(null);
           return;
         }
-        resolve(result?.[MIRROR_KEY] || null);
+        const fresh = result?.[MIRROR_KEY];
+        if (fresh) {
+          resolve(fresh);
+          return;
+        }
+        const legacy = result?.[LEGACY_MIRROR_KEY];
+        if (!legacy || typeof legacy !== 'object') {
+          resolve(null);
+          return;
+        }
+        // 旧镜像只搬一次：写到新键后清掉旧键，失败也无所谓（下次还能再读到）
+        try {
+          local.set?.({ [MIRROR_KEY]: legacy }, () => local.remove?.(LEGACY_MIRROR_KEY));
+        } catch {
+          /* 忽略 */
+        }
+        resolve(legacy);
       });
     } catch {
       resolve(null);
@@ -80,7 +127,7 @@ export function readChromeMirror() {
 
 export function clearChromeMirror() {
   try {
-    chrome?.storage?.local?.remove?.(MIRROR_KEY);
+    chrome?.storage?.local?.remove?.([MIRROR_KEY, LEGACY_MIRROR_KEY]);
   } catch {
     /* 忽略 */
   }
@@ -88,11 +135,138 @@ export function clearChromeMirror() {
 
 /* --------------------------------------------------------------- IndexedDB */
 
-const DB_NAME = 'lumen-assets';
+const DB_NAME = 'serein-assets';
+/** 改名前的旧库：上传的壁纸/图标搬进新库后删掉旧库 */
+const LEGACY_DB_NAME = 'lumen-assets';
 const DB_VERSION = 1;
 const STORE = 'files';
 
 let dbPromise = null;
+let legacyAssetsPromise = null;
+
+/**
+ * 把旧库（Lumen）的资产一次性搬进新库。
+ * 新库已经有数据就认为搬过了，绝不覆盖；旧库只在全部写入成功后删除，
+ * 中途失败会留着，下次启动重试。
+ */
+function adoptLegacyAssets(db) {
+  if (!legacyAssetsPromise) {
+    legacyAssetsPromise = copyLegacyDb(db).catch((err) => {
+      console.warn('[serein/storage] 旧资产搬迁失败', err);
+      return false;
+    });
+  }
+  return legacyAssetsPromise;
+}
+
+async function copyLegacyDb(db) {
+  if (typeof indexedDB.databases !== 'function') return false;
+  let names;
+  try {
+    names = (await indexedDB.databases()).map((entry) => entry.name);
+  } catch {
+    return false;
+  }
+  if (!names.includes(LEGACY_DB_NAME)) return false;
+  if ((await countStore(db)) > 0) return false;
+
+  const entries = await readLegacyEntries();
+  if (!entries || !entries.length) return false;
+  if (!(await writeEntries(db, entries))) return false;
+  if ((await countStore(db)) < entries.length) return false;
+  try {
+    indexedDB.deleteDatabase(LEGACY_DB_NAME);
+  } catch {
+    /* 删不掉就留着，反正新库已经有数据 */
+  }
+  return true;
+}
+
+function countStore(db) {
+  return new Promise((resolve) => {
+    try {
+      const request = db.transaction(STORE, 'readonly').objectStore(STORE).count();
+      request.onsuccess = () => resolve(request.result || 0);
+      request.onerror = () => resolve(0);
+    } catch {
+      resolve(0);
+    }
+  });
+}
+
+function openLegacyDb() {
+  return new Promise((resolve) => {
+    let request;
+    try {
+      request = indexedDB.open(LEGACY_DB_NAME);
+    } catch {
+      resolve(null);
+      return;
+    }
+    request.onupgradeneeded = () => {
+      // 正常不会走到这里（调用前已确认库存在）；万一发生就中止，别留下空库
+      try {
+        request.transaction.abort();
+      } catch {
+        /* 忽略 */
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => resolve(null);
+    request.onblocked = () => resolve(null);
+  });
+}
+
+function readLegacyEntries() {
+  return openLegacyDb().then((db) => {
+    if (!db) return null;
+    return new Promise((resolve) => {
+      const done = (value) => {
+        try {
+          db.close();
+        } catch {
+          /* 忽略 */
+        }
+        resolve(value);
+      };
+      try {
+        const store = db.transaction(STORE, 'readonly').objectStore(STORE);
+        const keysRequest = store.getAllKeys();
+        keysRequest.onerror = () => done(null);
+        keysRequest.onsuccess = () => {
+          const keys = keysRequest.result || [];
+          if (!keys.length) {
+            done([]);
+            return;
+          }
+          const valuesRequest = store.getAll();
+          valuesRequest.onerror = () => done(null);
+          valuesRequest.onsuccess = () => {
+            const values = valuesRequest.result || [];
+            done(keys.map((key, index) => [key, values[index]]));
+          };
+        };
+      } catch {
+        done(null);
+      }
+    });
+  });
+}
+
+function writeEntries(db, entries) {
+  return new Promise((resolve) => {
+    try {
+      const transaction = db.transaction(STORE, 'readwrite');
+      const store = transaction.objectStore(STORE);
+      for (const [key, value] of entries) store.put(value, key);
+      transaction.oncomplete = () => resolve(true);
+      transaction.onerror = () => resolve(false);
+      transaction.onabort = () => resolve(false);
+    } catch {
+      resolve(false);
+    }
+  });
+}
 
 function openDb() {
   if (dbPromise) return dbPromise;
@@ -126,10 +300,14 @@ function openDb() {
         db.close();
         dbPromise = null;
       };
-      resolve(db);
+      // 先把旧库资产搬完再交连接：否则首屏可能读到空库，壁纸/图标全丢
+      adoptLegacyAssets(db).then(
+        () => resolve(db),
+        () => resolve(db)
+      );
     };
     request.onerror = () => {
-      console.warn('[lumen/storage] IndexedDB 不可用', request.error);
+      console.warn('[serein/storage] IndexedDB 不可用', request.error);
       fail();
     };
     request.onblocked = () => fail();
@@ -176,7 +354,7 @@ function tx(mode, run) {
             request.onerror = () => finish(null);
           }
         } catch (err) {
-          console.warn('[lumen/storage] 事务失败', err);
+          console.warn('[serein/storage] 事务失败', err);
           finish(null);
           try {
             transaction.abort();

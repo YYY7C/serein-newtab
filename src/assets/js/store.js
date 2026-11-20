@@ -1,4 +1,4 @@
-/* Lumen · 状态容器
+/* Serein · 状态容器
  *
  * 一个极简的「单一状态树 + 订阅」实现，替代 Pinia/Vuex。
  * 变更通过 commit(scope) 广播，各视图按 scope 决定是否重绘。
@@ -22,7 +22,7 @@ function migrateBootState(raw) {
     return migrate(raw || null);
   } catch (err) {
     // 极端损坏（例如超深嵌套）不能让整个新标签页白屏
-    console.warn('[lumen/store] 配置迁移失败，先使用默认配置', err);
+    console.warn('[serein/store] 配置迁移失败，先使用默认配置', err);
     return createDefaultState();
   }
 }
@@ -69,7 +69,7 @@ function emit(scope) {
     try {
       fn(scope, state);
     } catch (err) {
-      console.error('[lumen/store] 订阅者异常', err);
+      console.error('[serein/store] 订阅者异常', err);
     }
   }
 }
@@ -105,7 +105,7 @@ export async function restoreFromMirror() {
     typeof bootSnapshot === 'object' &&
     !Array.isArray(bootSnapshot) &&
     Object.keys(bootSnapshot).length > 0 &&
-    // 只在看起来真的是 Lumen 状态时才阻止镜像恢复；`{foo:1}` 这类脏对象要让位给镜像
+    // 只在看起来真的是 Serein 状态时才阻止镜像恢复；`{foo:1}` 这类脏对象要让位给镜像
     Boolean(
       bootSnapshot.config ||
         bootSnapshot.meta ||
@@ -123,7 +123,7 @@ export async function restoreFromMirror() {
   try {
     next = migrate(mirror);
   } catch (err) {
-    console.warn('[lumen/store] 镜像配置损坏，已忽略', err);
+    console.warn('[serein/store] 镜像配置损坏，已忽略', err);
     return false;
   }
   // 原地替换，保持所有已持有的 state 引用继续有效

@@ -1,4 +1,4 @@
-/* Lumen · 侧边小组件
+/* Serein · 侧边小组件
  *
  * 设计原则：卡片只构建一次，之后原地更新 —— 这样在待办里打字、在便签里写字
  * 都不会因为其他状态变化而丢失焦点。
@@ -231,7 +231,7 @@ async function loadWeather(force) {
   try {
     await refreshWeather(store.state, { force });
   } catch (err) {
-    console.warn('[lumen/widgets] 天气刷新异常', err);
+    console.warn('[serein/widgets] 天气刷新异常', err);
   }
   updateWeather();
 }
