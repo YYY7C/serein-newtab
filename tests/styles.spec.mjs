@@ -70,4 +70,37 @@ test.describe('密度自适应', () => {
     );
     expect(parseInt(icon, 10)).toBe(72);
   });
+
+  test('1024×640 下设置面板不溢出、侧栏可滚动', async ({ page }) => {
+    await mockWeather(page);
+    await page.setViewportSize({ width: 1024, height: 640 });
+    await gotoNewTab(page);
+    await page.evaluate(async () => {
+      const store = await import('/assets/js/store.js');
+      Object.assign(store.state.config.widgets, { pomodoro: true, worldClock: true, countdown: true });
+      store.state.countdown = { title: '布局测试', target: Date.now() + 86400000 };
+      store.commit('config');
+      store.commit('countdown');
+      store.flushNow();
+    });
+
+    await page.locator('[data-action="settings"]').click();
+    await expect(page.locator('.settings.is-open')).toHaveCount(1);
+    await page.waitForTimeout(400);
+    const box = await page.locator('.settings-panel').boundingBox();
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.y).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(1024.5);
+    expect(box.y + box.height).toBeLessThanOrEqual(640.5);
+
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.settings.is-open')).toHaveCount(0);
+    const sidebar = await page.locator('#sidebar').evaluate((node) => ({
+      scrollHeight: node.scrollHeight,
+      clientHeight: node.clientHeight,
+      overflowY: getComputedStyle(node).overflowY,
+    }));
+    expect(sidebar.scrollHeight).toBeGreaterThan(sidebar.clientHeight);
+    expect(sidebar.overflowY).toBe('auto');
+  });
 });

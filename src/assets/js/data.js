@@ -111,6 +111,15 @@ function sanitizeTheme(input) {
   if (input._format && input._format !== 'serein-theme') throw new Error('不是 Serein 主题文件');
   const theme = input.theme && typeof input.theme === 'object' ? input.theme : input;
   const bg = theme.background && typeof theme.background === 'object' ? theme.background : {};
+  // 随便一个 JSON（比如别的扩展的备份）不能被当成「空主题」静默接受
+  const hasFields =
+    ['style', 'accent', 'glass', 'radius', 'fontScale', 'animations', 'performance', 'customCss'].some(
+      (key) => theme[key] !== undefined
+    ) ||
+    ['tone', 'blur', 'brightness', 'saturate', 'vignette', 'veilByStyle'].some(
+      (key) => bg[key] !== undefined
+    );
+  if (!hasFields) throw new Error('主题文件里没有可识别的外观设置');
   const number = (value, min, max) => {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? clamp(parsed, min, max) : null;

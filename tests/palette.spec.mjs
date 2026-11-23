@@ -18,15 +18,20 @@ test.describe('命令面板', () => {
     await input.fill('todo 买牛奶');
     await expect(page.locator('#suggest .suggest-item').first()).toContainText('添加待办「买牛奶」');
     await input.press('Enter');
-    await expect(page.locator('.toast-text').last()).toContainText('已添加待办');
+    await expect(page.locator('.toast-text', { hasText: '已添加待办' })).toHaveCount(1);
+    await expect(input).toHaveValue('');
+    await expect(input).toBeFocused();
 
     await input.fill('note 第二条便签');
     await input.press('Enter');
-    await expect(page.locator('.toast-text').last()).toContainText('已追加到便签');
+    await expect(page.locator('.toast-text', { hasText: '已追加到便签' })).toHaveCount(1);
+    await expect(input).toHaveValue('');
+    await expect(page.locator('.notes-area')).toHaveValue(/第二条便签/);
 
     await input.fill('copy 复制一段测试文本');
     await input.press('Enter');
-    await expect(page.locator('.toast-text').last()).toContainText('已复制');
+    await expect(page.locator('.toast-text', { hasText: '已复制' })).toHaveCount(1);
+    await expect(input).toHaveValue('');
 
     const state = await page.evaluate(async () => {
       const store = await import('/assets/js/store.js');
@@ -107,6 +112,73 @@ test.describe('命令面板', () => {
     const command = page.locator('#suggest .suggest-item', { hasText: '搜索打开的标签页' });
     await expect(command).toHaveCount(1);
     await command.click();
-    await expect(page.locator('.toast-text').last()).toContainText('只在安装扩展后可用');
+    await expect(page.locator('.toast-text', { hasText: '只在安装扩展后可用' })).toHaveCount(1);
+  });
+
+  test('命中的命令默认选中，回车直接执行', async ({ page }) => {
+    await gotoNewTab(page);
+    const input = page.locator('#search-input');
+    await input.fill('设置');
+    await expect(page.locator('#suggest .suggest-item.is-active')).toContainText('打开设置');
+    await input.press('Enter');
+    await expect(page.locator('.settings.is-open')).toHaveCount(1);
+    await expect(page.locator('.settings-title')).toHaveText('外观');
+  });
+
+  test('快捷命令内容不会发给搜索联想接口', async ({ page }) => {
+    let calls = 0;
+    await page.route('https://suggestion.baidu.com/**', (route) => {
+      calls += 1;
+      return route.fulfill({
+        status: 200,
+        headers: { 'content-type': 'text/plain; charset=utf-8', 'access-control-allow-origin': '*' },
+        body: 'window.baidu.sug({q:"x",p:false,s:[]});',
+      });
+    });
+    await gotoNewTab(page);
+    const input = page.locator('#search-input');
+
+    await input.fill('todo 私人内容');
+    await page.waitForTimeout(600);
+    expect(calls).toBe(0);
+    await expect(page.locator('#suggest .suggest-status-text')).toHaveCount(0);
+
+    await input.fill('note 我的私密笔记');
+    await page.waitForTimeout(600);
+    expect(calls).toBe(0);
+
+    await input.fill('tab 内部系统');
+    await page.waitForTimeout(600);
+    expect(calls).toBe(0);
+  });
+
+  test('只输入命令前缀时回车不会变成搜索', async ({ page }) => {
+    await gotoNewTab(page);
+    const input = page.locator('#search-input');
+    await input.fill('todo ');
+    await expect(page.locator('#suggest .suggest-status-text')).toContainText('输入待办内容');
+    const before = page.url();
+    await input.press('Enter');
+    await page.waitForTimeout(300);
+    expect(page.url()).toBe(before);
+    await expect(input).toBeFocused();
+  });
+
+  test('矮窗口下联想面板不超出视口', async ({ page }) => {
+    await page.setViewportSize({ width: 1024, height: 600 });
+    await gotoNewTab(page);
+    await page.evaluate(async () => {
+      const store = await import('/assets/js/store.js');
+      store.state.config.search.recent = ['第一条', '第二条', '第三条', '第四条', '第五条', '第六条', '第七条'];
+      store.commit('config');
+      store.flushNow();
+    });
+    await page.keyboard.press('Control+KeyK');
+    const panel = page.locator('#suggest.is-open');
+    await expect(panel).toBeVisible();
+    await expect(page.locator('#suggest .suggest-item')).toHaveCount(7);
+    const box = await panel.boundingBox();
+    expect(box.y).toBeGreaterThan(0);
+    expect(box.y + box.height).toBeLessThanOrEqual(600.5);
   });
 });

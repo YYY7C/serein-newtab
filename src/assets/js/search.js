@@ -5,7 +5,18 @@
  * 这里的引擎只决定「本页提交后跳到哪个地址」。
  */
 
-import { $, h, clear, svgIcon, debounce, normalizeUrl, isSafeUrl, bus, hostOf } from './util.js';
+import {
+  $,
+  h,
+  clear,
+  svgIcon,
+  debounce,
+  normalizeUrl,
+  isSafeUrl,
+  bus,
+  hostOf,
+  readableTextOn,
+} from './util.js';
 import {
   enginesFor,
   engineById,
@@ -159,6 +170,39 @@ function parseQuickQuery(query) {
     return { ...entry, arg, key: `${entry.kind}:${arg.toLowerCase()}` };
   }
   return null;
+}
+
+/** 只输入了「todo」「note」这类前缀、还没写内容时的提示与默认行为 */
+const QUICK_WORDS = {
+  todo: 'todo',
+  待办: 'todo',
+  note: 'note',
+  便签: 'note',
+  copy: 'copy',
+  复制: 'copy',
+  tab: 'tabs',
+  标签页: 'tabs',
+  bookmark: 'bookmarks',
+  bm: 'bookmarks',
+  书签: 'bookmarks',
+  history: 'history',
+  历史: 'history',
+};
+// 用原始输入匹配（不能先 trim）：末尾的空格正是「前缀已输入、内容还没写」的信号
+const QUICK_PREFIX = /^\s*(todo|待办|note|便签|copy|复制|tab|标签页|bookmark|bm|书签|history|历史)\s+$/i;
+const QUICK_HINTS = {
+  todo: '输入待办内容，回车直接添加',
+  note: '输入要记的内容，回车追加到便签',
+  copy: '输入要复制的文字，回车写入剪贴板',
+  tabs: '输入关键词，搜索已打开的标签页',
+  bookmarks: '输入关键词，搜索书签',
+  history: '输入关键词，搜索浏览历史',
+};
+
+function pendingQuickKind(query) {
+  const match = QUICK_PREFIX.exec(query);
+  if (!match) return '';
+  return QUICK_WORDS[match[1].toLowerCase()] || '';
 }
 
 let quickState = { key: '', kind: '', status: 'idle', items: [] };
@@ -468,6 +512,7 @@ function paintEngine() {
   } else {
     badge.textContent = engine.letter;
     badge.style.background = `linear-gradient(140deg, ${engine.color}, ${shade(engine.color, -0.22)})`;
+    badge.style.color = readableTextOn(engine.color);
   }
   els.engineBtn.appendChild(badge);
   els.engineBtn.appendChild(h('span', { text: engine.name }));
@@ -544,10 +589,12 @@ function onInput() {
   // 输入法组合期间 input 事件带的是拼音：先不画结果，等 compositionend 再处理
   if (composing) return;
   const query = els.input.value.trim();
+  const quick = parseQuickQuery(query);
+  const pending = pendingQuickKind(els.input.value);
   latestQuery = query;
   activeIndex = -1;
   suggestError = false;
-  syncQuickState(parseQuickQuery(query));
+  syncQuickState(quick);
   syncInputState();
 
   if (!query) {
@@ -566,8 +613,9 @@ function onInput() {
   }
 
   renderSuggestions();
-  if (looksLikeUrl(query)) {
-    // 已经识别成网址时不需要再把整条 URL 发给搜索联想接口
+  // 网址、命令参数（todo/note/copy/tab/...）都不该发给搜索联想：
+  // 用户可能刚在便签/待办里写下私人内容，不能因为一个前缀就外发。
+  if (looksLikeUrl(query) || quick || pending) {
     suggestEpoch += 1;
     requestSuggest.cancel();
     abortController?.abort();
@@ -669,6 +717,11 @@ function commitCurrent() {
     const row = rows[activeIndex];
     closeSuggest();
     row.run();
+    return;
+  }
+  // 只有命令前缀（如「todo 」）时回车不应该变成搜索「todo 」
+  if (pendingQuickKind(els.input.value)) {
+    els.input.focus({ preventScroll: true });
     return;
   }
   submitQuery();
@@ -1056,8 +1109,11 @@ function renderSuggestions(remote = [], { keepActive = false, idle = false } = {
   const lower = query.toLowerCase();
   const isUrl = looksLikeUrl(query);
   const quick = isUrl ? null : parseQuickQuery(query);
+  const pending = isUrl ? '' : pendingQuickKind(els.input.value);
   // 远程联想常会把本地已经出现的条目再吐一遍，记下已出现的文字用于去重
   const claimed = new Set();
+  // 没有可选行但有状态说明（例如「todo 」等待输入）：面板仍要打开
+  let extraContent = false;
 
   // 1) 网址直开
   if (isUrl) {
@@ -1074,8 +1130,8 @@ function renderSuggestions(remote = [], { keepActive = false, idle = false } = {
     ]);
   }
 
-  // 2) 命令
-  const commands = matchCommands(query);
+  // 2) 命令：已经进入带参数模式时不再混排命令，避免 Enter 打错目标
+  const commands = quick || pending ? [] : matchCommands(query);
   commands.forEach((command) => claimed.add(command.label.toLowerCase()));
   appendGroup(
     '命令',
@@ -1084,6 +1140,7 @@ function renderSuggestions(remote = [], { keepActive = false, idle = false } = {
       text: command.label,
       query,
       hint: '命令',
+      kind: 'command',
       run: () => {
         els.input.value = '';
         syncInputState();
@@ -1109,7 +1166,13 @@ function renderSuggestions(remote = [], { keepActive = false, idle = false } = {
         hint: 'Enter',
         primary: true,
         kind: 'quick',
-        run: () => runQuickAction(quick),
+        run: () => {
+          // 命令内容已经消费掉了：清空输入，光标留在搜索框，方便继续输入
+          els.input.value = '';
+          latestQuery = '';
+          syncInputState();
+          runQuickAction(quick);
+        },
       },
     ]);
   }
@@ -1151,8 +1214,14 @@ function renderSuggestions(remote = [], { keepActive = false, idle = false } = {
     if (source) claimed.add(quick.title.toLowerCase());
   }
 
+  // 2.7) 只写了前缀：告诉用户接下来该输入什么，而不是悄悄退化成搜索
+  if (pending) {
+    appendPaletteStatus(QUICK_HINTS[pending]);
+    extraContent = true;
+  }
+
   // 3) 本地快捷方式（包含文件夹里的条目）
-  if (!isUrl) {
+  if (!isUrl && !quick && !pending) {
     const groupTitles = new Map(store.state.groups.map((group) => [group.id, group.title]));
     const matches = store.state.shortcuts
       .filter((item) => item.title.toLowerCase().includes(lower) || item.url.toLowerCase().includes(lower))
@@ -1171,7 +1240,7 @@ function renderSuggestions(remote = [], { keepActive = false, idle = false } = {
   }
 
   // 4) 最近搜索里与当前输入匹配的条目
-  if (historyOn && !isUrl) {
+  if (historyOn && !isUrl && !quick && !pending) {
     const recentMatches = recentQueries()
       .filter((item) => item.toLowerCase() !== lower && item.toLowerCase().includes(lower))
       .slice(0, 3);
@@ -1192,10 +1261,11 @@ function renderSuggestions(remote = [], { keepActive = false, idle = false } = {
     );
   }
 
-  // 5) 远程联想
+  // 5) 远程联想（命令模式下不展示，也不请求）
   const seen = new Set();
   const remoteRows = [];
-  for (const item of remote.slice(0, 12)) {
+  const remoteList = quick || pending ? [] : remote;
+  for (const item of remoteList.slice(0, 12)) {
     if (typeof item !== 'string') continue;
     const text = item.trim().slice(0, 200);
     if (!text) continue;
@@ -1216,6 +1286,8 @@ function renderSuggestions(remote = [], { keepActive = false, idle = false } = {
   // 6) 联想请求还在路上：先占两行骨架，避免看起来像没反应
   if (
     !isUrl &&
+    !quick &&
+    !pending &&
     !remoteRows.length &&
     suggestLoading &&
     engine.suggest &&
@@ -1227,6 +1299,8 @@ function renderSuggestions(remote = [], { keepActive = false, idle = false } = {
   // 6.5) 联想请求失败：写明状态并提供重试，别让候选无声消失
   if (
     !isUrl &&
+    !quick &&
+    !pending &&
     !remoteRows.length &&
     !suggestLoading &&
     suggestError &&
@@ -1237,7 +1311,7 @@ function renderSuggestions(remote = [], { keepActive = false, idle = false } = {
   }
 
   // 7) 兜底：直接搜索（始终留在最后，方向键可以稳定地找到它）
-  if (!isUrl) {
+  if (!isUrl && !quick && !pending) {
     const exactSearch = rows.some((row) => row.kind === 'search' && row.text === query);
     if (!exactSearch) {
       appendGroup(null, [
@@ -1254,16 +1328,23 @@ function renderSuggestions(remote = [], { keepActive = false, idle = false } = {
     }
   }
 
-  if (!rows.length) {
+  if (!rows.length && !extraContent) {
     closeSuggest();
     return;
   }
 
   openPanel();
   // 带参数命令只有一行有意义：让它默认选中，用户敲完直接回车即可执行
-  const quickIndex = quick && ['todo', 'note', 'copy'].includes(quick.kind) ? rows.findIndex((row) => row.kind === 'quick') : -1;
+  const quickIndex =
+    quick && ['todo', 'note', 'copy'].includes(quick.kind)
+      ? rows.findIndex((row) => row.kind === 'quick')
+      : -1;
   if (quickIndex >= 0) {
     activeIndex = quickIndex;
+    paintActive();
+  } else if (!isUrl && rows[0]?.kind === 'command') {
+    // 命令命中时默认选中第一条：README 里承诺的「输入设置直达命令」要真的能回车直达
+    activeIndex = 0;
     paintActive();
   } else if (previousActive >= 0) {
     activeIndex = Math.min(previousActive, rows.length - 1);

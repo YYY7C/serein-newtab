@@ -1,6 +1,6 @@
 {
   "name": "serein-newtab",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "private": true,
   "description": "Serein 新标签页：零依赖、零构建的 MV3 扩展",
   "scripts": {

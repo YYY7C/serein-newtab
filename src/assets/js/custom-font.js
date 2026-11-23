@@ -18,9 +18,9 @@ export async function applyCustomFont(state) {
 
   if (!key) {
     reset();
-    return;
+    return false;
   }
-  if (key === loadedKey && loadedFace) return;
+  if (key === loadedKey && loadedFace) return true;
 
   let blob = null;
   try {
@@ -28,26 +28,41 @@ export async function applyCustomFont(state) {
   } catch {
     blob = null;
   }
-  if (token !== seq) return;
+  if (token !== seq) return false;
   if (!(blob instanceof Blob)) {
     reset();
-    return;
+    return false;
   }
 
   const FontFaceCtor = globalThis.FontFace;
-  if (typeof FontFaceCtor !== 'function') return;
+  if (typeof FontFaceCtor !== 'function') return false;
 
   try {
     const face = new FontFaceCtor(FAMILY, await blob.arrayBuffer(), { display: 'swap' });
     await face.load();
-    if (token !== seq) return;
+    if (token !== seq) return false;
     if (loadedFace) document.fonts.delete(loadedFace);
     document.fonts.add(face);
     loadedFace = face;
     loadedKey = key;
     document.documentElement.style.setProperty('--font-sans', `'${FAMILY}', var(--font-sans-base)`);
+    return true;
   } catch {
     reset();
+    return false;
+  }
+}
+
+/** 先验证再落盘：损坏的字体文件不该写进 IndexedDB 和配置 */
+export async function canLoadFontFile(file) {
+  const FontFaceCtor = globalThis.FontFace;
+  if (typeof FontFaceCtor !== 'function') return true;
+  try {
+    const face = new FontFaceCtor('Serein Probe', await file.arrayBuffer(), { display: 'swap' });
+    await face.load();
+    return true;
+  } catch {
+    return false;
   }
 }
 

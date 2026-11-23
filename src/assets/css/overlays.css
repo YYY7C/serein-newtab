@@ -383,7 +383,7 @@ html[data-tone='dark'] .nav-item.is-active {
 
 .seg button.is-active {
   background: color-mix(in srgb, var(--accent) 88%, black 6%);
-  color: #fff;
+  color: var(--accent-fg);
   box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 44%, transparent);
 }
 
@@ -554,7 +554,7 @@ select.text-input {
 .btn.is-primary {
   background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 92%, white 8%), var(--accent));
   border-color: transparent;
-  color: #fff;
+  color: var(--accent-fg);
   box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 40%, transparent);
 }
 

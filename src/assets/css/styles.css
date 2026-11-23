@@ -21,8 +21,8 @@ html[data-style='noir'] {
 
   --fg: #f5f6f8;
   --fg-1: rgba(245, 246, 248, 0.92);
-  --fg-2: rgba(245, 246, 248, 0.56);
-  --fg-3: rgba(245, 246, 248, 0.34);
+  --fg-2: rgba(245, 246, 248, 0.72);
+  --fg-3: rgba(245, 246, 248, 0.52);
   --fg-4: rgba(245, 246, 248, 0.14);
 
   --glass-bg: var(--surface-1);
@@ -283,8 +283,8 @@ html[data-style='paper'] {
 
   --fg: #1d1a15;
   --fg-1: rgba(29, 26, 21, 0.92);
-  --fg-2: rgba(29, 26, 21, 0.64);
-  --fg-3: rgba(29, 26, 21, 0.42);
+  --fg-2: rgba(29, 26, 21, 0.72);
+  --fg-3: rgba(29, 26, 21, 0.62);
   --fg-4: rgba(29, 26, 21, 0.16);
 
   --glass-bg: var(--surface-1);
@@ -730,8 +730,8 @@ html[data-style='editorial'] {
 
   --fg: var(--ink);
   --fg-1: rgba(25, 23, 19, 0.92);
-  --fg-2: rgba(25, 23, 19, 0.6);
-  --fg-3: rgba(25, 23, 19, 0.42);
+  --fg-2: rgba(25, 23, 19, 0.72);
+  --fg-3: rgba(25, 23, 19, 0.62);
   --fg-4: rgba(25, 23, 19, 0.15);
 
   --glass-bg: transparent;
@@ -1320,8 +1320,8 @@ html[data-style='terminal'] {
 
   --fg: #dfe3e6;
   --fg-1: rgba(223, 227, 230, 0.94);
-  --fg-2: rgba(223, 227, 230, 0.58);
-  --fg-3: rgba(223, 227, 230, 0.34);
+  --fg-2: rgba(223, 227, 230, 0.72);
+  --fg-3: rgba(223, 227, 230, 0.54);
   --fg-4: rgba(223, 227, 230, 0.15);
 
   --glass-bg: transparent;
@@ -2003,12 +2003,13 @@ html[data-style='terminal'] kbd {
 }
 
 .style-form.is-grid {
-  color: color-mix(in srgb, var(--accent) 82%, #fff);
+  /* 底色已经带强调色，文字改用正文色：强调色在浅底上只有约 2:1 */
+  color: var(--fg-1);
   background: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 .style-form.is-list {
-  color: var(--fg-3);
+  color: var(--fg-2);
   background: color-mix(in srgb, var(--fg-3) 14%, transparent);
 }
 

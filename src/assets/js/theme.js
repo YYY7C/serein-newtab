@@ -2,7 +2,7 @@
  * 所有视觉参数集中在这里落到 :root，设置页与启动流程共用。
  */
 
-import { clamp } from './util.js';
+import { clamp, readableTextOn } from './util.js';
 
 /**
  * 每套风格对「形状」的约束，避免用户把直角风格拖成大圆角。
@@ -75,8 +75,10 @@ export function applyConfig(state) {
 
   root.dataset.style = config.style || 'glass';
 
-  /* 强调色 */
-  style.setProperty('--accent', config.accent || '#6c8cff');
+  /* 强调色 + 与之匹配的前景色（亮强调色用深色字，避免白字对比度不足） */
+  const accent = config.accent || '#6c8cff';
+  style.setProperty('--accent', accent);
+  style.setProperty('--accent-fg', readableTextOn(accent));
 
   /* 毛玻璃（直角 / 纸质风格下自动归零） */
   const blur = config.performance ? 0 : clamp(config.glass ?? 18, 0, 40) * shape.blur;

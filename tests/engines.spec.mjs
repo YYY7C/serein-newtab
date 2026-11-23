@@ -63,6 +63,49 @@ test.describe('自定义搜索引擎', () => {
     await expect(page.locator('.settings .row', { hasText: '还没有自定义引擎' })).toHaveCount(1);
   });
 
+  test('重复的搜索地址会被拒绝', async ({ page }) => {
+    await gotoNewTab(page);
+    await openSearchSettings(page);
+    const add = async (name) => {
+      await page.getByRole('button', { name: '添加引擎' }).click();
+      const dialog = page.getByRole('dialog', { name: '添加搜索引擎' });
+      await dialog.getByLabel('引擎名称').fill(name);
+      await dialog.getByLabel('搜索地址模板').fill('https://dup.example.com/?q=%s');
+      await dialog.getByRole('button', { name: '添加' }).click();
+    };
+
+    await add('第一个');
+    await expect(page.locator('[data-engine-id^="custom-"]')).toHaveCount(1);
+
+    await add('重复的');
+    await expect(page.locator('.toast-text', { hasText: '已经添加过了' })).toHaveCount(1);
+    await expect(page.locator('[data-engine-id^="custom-"]')).toHaveCount(1);
+  });
+
+  test('达到 12 个自定义引擎后禁用添加入口', async ({ page }) => {
+    await gotoNewTab(page);
+    await page.evaluate(async () => {
+      const store = await import('/assets/js/store.js');
+      store.state.config.search.engines = Array.from({ length: 12 }, (_, i) => ({
+        id: `custom-limit-${i}`,
+        name: `引擎 ${i + 1}`,
+        url: `https://limit${i}.example.com/?q=%s`,
+        color: '#6c8cff',
+        letter: '引',
+        custom: true,
+        suggest: null,
+      }));
+      store.commit('config');
+      store.flushNow();
+    });
+    await openSearchSettings(page);
+
+    const addRow = page.locator('.settings .row', { hasText: '添加搜索引擎' });
+    await expect(addRow).toContainText('12 / 12');
+    await expect(addRow.getByRole('button', { name: '添加引擎' })).toBeDisabled();
+    await expect(page.locator('[data-engine-id^="custom-"]')).toHaveCount(12);
+  });
+
   test('导入数据里的非法自定义引擎会被清洗', async ({ page }) => {
     await gotoNewTab(page);
     await page.evaluate(async () => {

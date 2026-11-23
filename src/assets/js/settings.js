@@ -14,6 +14,7 @@ import {
   normalizeUrl,
   isUsableUrl,
   prettyHost,
+  readableTextOn,
 } from './util.js';
 import * as store from './store.js';
 import { makeSwitch, makeSegmented, makeRange, makeStepper, shortcutEditor, confirmDialog, openModal } from './modals.js';
@@ -42,7 +43,7 @@ import {
 } from './wallpaper.js';
 import { files } from './storage.js';
 import { applyConfig, applyCustomCss, dockWidth, CUSTOM_CSS_MAX } from './theme.js';
-import { applyCustomFont } from './custom-font.js';
+import { applyCustomFont, canLoadFontFile } from './custom-font.js';
 import { exportState, importState, exportTheme, importTheme, resetAll, usageReport } from './data.js';
 import {
   hasPermissionApi,
@@ -573,6 +574,11 @@ function buildAppearance() {
               bus.emit('toast', { text: '字体文件超过 8 MB，请先压缩或裁剪字形', error: true });
               return;
             }
+            // 先让浏览器解析一遍：坏文件/伪装扩展名直接拒绝，不要先落盘再失败
+            if (!(await canLoadFontFile(file))) {
+              bus.emit('toast', { text: '这个字体文件无法解析，请换一个文件', error: true });
+              return;
+            }
             const seq = ++fontUploadSeq;
             const id = `f${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
             if (!(await files.put(`font:${id}`, file))) {
@@ -585,7 +591,14 @@ function buildAppearance() {
             }
             const previous = config.customFont || { id: '', name: '' };
             config.customFont = { id, name: file.name.slice(0, 60) };
-            await applyCustomFont(store.state);
+            const applied = await applyCustomFont(store.state);
+            if (!applied) {
+              config.customFont = previous;
+              await applyCustomFont(store.state);
+              await files.remove(`font:${id}`);
+              bus.emit('toast', { text: '字体加载失败，已保留原字体', error: true });
+              return;
+            }
             touchNow();
             if (!store.flushNow()) {
               config.customFont = previous;
@@ -699,38 +712,46 @@ function buildAppearance() {
               spellcheck: 'false',
               placeholder: '/* 例如 */\n.clock-time { letter-spacing: 0.02em; }',
               'aria-label': '自定义 CSS',
-              value: config.customCss || '',
             });
             area.value = config.customCss || '';
-            area.addEventListener('input', () => {
-              config.customCss = area.value;
-              applyCustomCss(area.value);
-              persist();
-              const count = area.closest('.custom-css-editor')?.querySelector('.custom-css-count');
-              if (count) count.textContent = `${area.value.length} / ${CUSTOM_CSS_MAX}`;
-            });
-            return area;
-          })(),
-          h(
-            'div',
-            { class: 'custom-css-foot' },
-            h('span', {
+            const count = h('span', {
               class: 'field-hint custom-css-count',
-              text: `${(config.customCss || '').length} / ${CUSTOM_CSS_MAX}`,
-            }),
-            h('button', {
+              text: `${area.value.length} / ${CUSTOM_CSS_MAX}`,
+            });
+            const clear = h('button', {
               class: 'btn is-ghost',
               type: 'button',
               text: '清空',
-              disabled: !config.customCss,
-              onclick: () => {
-                config.customCss = '';
-                applyCustomCss('');
-                touch();
-                selectSection('appearance');
-              },
-            })
-          )
+              disabled: !area.value.trim(),
+            });
+            // 20k 字符的样式表每敲一个字就重新解析会明显掉帧（实测 100–200ms），
+            // 这里等输入停顿再应用；计数与落盘仍然是即时的。
+            const applyCssSoon = debounce((text) => applyCustomCss(text), 160);
+            let pending = false;
+            area.addEventListener('input', () => {
+              config.customCss = area.value;
+              pending = true;
+              applyCssSoon(area.value);
+              persist();
+              count.textContent = `${area.value.length} / ${CUSTOM_CSS_MAX}`;
+              clear.disabled = !area.value.trim();
+            });
+            area.addEventListener('blur', () => {
+              if (!pending) return;
+              pending = false;
+              applyCssSoon.cancel();
+              applyCustomCss(area.value);
+            });
+            clear.addEventListener('click', () => {
+              pending = false;
+              applyCssSoon.cancel();
+              config.customCss = '';
+              applyCustomCss('');
+              touch();
+              selectSection('appearance');
+            });
+            return [area, h('div', { class: 'custom-css-foot' }, count, clear)];
+          })()
         ),
         { stacked: true }
       )
@@ -2015,7 +2036,14 @@ function buildSearch() {
         h('span', {
           class: 'engine-badge',
           text: engine.letter,
-          style: { background: engine.color, width: '20px', height: '20px', fontSize: '10px', borderRadius: '6px' },
+          style: {
+            background: engine.color,
+            color: readableTextOn(engine.color),
+            width: '20px',
+            height: '20px',
+            fontSize: '10px',
+            borderRadius: '6px',
+          },
         }),
         h('span', { text: engine.name })
       )

@@ -61,6 +61,8 @@ export async function setStyle(page, style) {
     const store = await import('/assets/js/store.js');
     store.state.config.style = next;
     store.commit('config');
+    const { applyBackground } = await import('/assets/js/wallpaper.js');
+    applyBackground(store.state);
   }, style);
   await expect(page.locator('html')).toHaveAttribute('data-style', style);
 }

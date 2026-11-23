@@ -138,6 +138,7 @@ Serein 的做法是把上面几件事一次做对：
 
 - 两个商店的注册、上传、隐私表单与审核注意事项：[docs/publishing.md](docs/publishing.md)
 - 商品页文案、权限理由、单一用途声明：[docs/store-listing.md](docs/store-listing.md)
+- 未完成功能、已知限制与待补测试：[docs/roadmap.md](docs/roadmap.md)
 - 商店素材（1280×800 截图、440×280 / 1400×560 宣传图、300×300 logo）：[docs/store/](docs/store)
 
 ---
@@ -234,24 +235,27 @@ src/
 │       ├── icons.js            图标解析：自定义 -> 内置品牌图标 -> _favicon -> 品牌色徽标
 │       ├── brands.js           host -> 内置图标 slug 的索引（含子域回退）
 │       ├── clock.js            时钟、日期、农历、问候
-│       ├── search.js           搜索框、多引擎、最近搜索、联想、键盘导航
+│       ├── search.js           搜索框、多引擎、最近搜索、联想、命令面板、键盘导航
+│       ├── quick.js            命令面板数据源（标签页/书签/历史、todo/note/copy）
 │       ├── menu.js             右键菜单（单例）
 │       ├── modals.js           弹窗基座、快捷方式编辑器、确认/输入框
 │       ├── tiles.js            图标网格、文件夹、拖拽、右键菜单
 │       ├── weather.js          Open-Meteo 天气与城市搜索
-│       ├── widgets.js          天气 / 待办 / 便签 / 书签
+│       ├── widgets.js          天气 / 待办 / 便签 / 专注 / 世界时钟 / 倒计时 / 书签
 │       ├── settings.js         设置面板（8 个分区）
-│       ├── data.js             导入 / 导出 / 重置 / 用量（zip 备份）
+│       ├── data.js             导入 / 导出 / 重置 / 用量 / 主题（zip 备份）
 │       ├── zip.js              极简 zip 读写（备份用，无第三方依赖）
+│       ├── custom-font.js      自定义字体：FontFace 注册与回退
 │       └── background.js       Service Worker（工具栏图标点击）
 
 docs/
 ├── screenshots/                README 用的预览图
 ├── store/                      商店素材：截图、宣传图、logo
 ├── publishing.md               上架流程（Chrome Web Store / Edge Add-ons）
-└── store-listing.md            商店文案与权限理由
+├── store-listing.md            商店文案与权限理由
+└── roadmap.md                  未完成功能、已知限制与待补测试
 
-tests/                          Playwright 冒烟测试（启动/搜索/文件夹/设置/六套风格/多标签页/备份）
+tests/                          Playwright 测试（66 条：启动/搜索/文件夹/设置/风格/多标签页/备份/命令面板/字体/主题/壁纸池/新小组件/可访问性）
 scripts/package.ps1             打包上传用的 zip（产物在 dist/，不入库）
 .github/workflows/ci.yml        lint + 测试 + 打包
 .github/workflows/release.yml  打 tag 时生成 GitHub Release
@@ -276,7 +280,7 @@ $env:PW_CHANNEL = 'msedge'   # 本地复用系统 Edge，避免下载 Chromium
 npm test
 ```
 
-CI 会跑 lint + 22 条 Playwright 冒烟测试 + 打包，详细覆盖范围见 CONTRIBUTING.md。
+CI 会跑 lint + 66 条 Playwright 测试 + 打包，详细覆盖范围见 CONTRIBUTING.md 与 [docs/roadmap.md](docs/roadmap.md)。
 
 | 想改什么 | 改哪里 |
 |---|---|

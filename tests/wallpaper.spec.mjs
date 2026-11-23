@@ -34,7 +34,7 @@ test.describe('本地壁纸池与轮换', () => {
       { name: 'one.png', mimeType: 'image/png', buffer: PNG },
       { name: 'two.png', mimeType: 'image/png', buffer: PNG },
     ]);
-    await expect(page.locator('.toast-text').last()).toContainText('已添加 2 张本地壁纸');
+    await expect(page.locator('.toast-text', { hasText: '已添加 2 张本地壁纸' })).toHaveCount(1);
     await expect(page.locator('.pool-item')).toHaveCount(2);
 
     let state = await bgState(page);

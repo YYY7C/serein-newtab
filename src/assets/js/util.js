@@ -206,6 +206,24 @@ export function isSafeImageUrl(input) {
   }
 }
 
+/**
+ * 选一个能在给定背景色上保持可读的前景色。
+ * 强调色和品牌色都可能很亮（亮绿、粉色），白字会掉到 2–3:1。
+ */
+export function readableTextOn(input) {
+  const value = String(input ?? '').trim();
+  const match = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(value);
+  if (!match) return '#ffffff';
+  let hex = match[1];
+  if (hex.length === 3) hex = hex.split('').map((char) => char + char).join('');
+  const channel = (offset) => parseInt(hex.slice(offset, offset + 2), 16) / 255;
+  const linear = (c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  const luminance =
+    0.2126 * linear(channel(0)) + 0.7152 * linear(channel(2)) + 0.0722 * linear(channel(4));
+  // 0.18 附近是白字与深色字的对比度交点，两侧都能过 AA
+  return luminance > 0.18 ? '#0a0c10' : '#ffffff';
+}
+
 export function hostOf(url) {
   try {
     return new URL(normalizeUrl(url)).hostname.replace(/^www\./, '').toLowerCase();

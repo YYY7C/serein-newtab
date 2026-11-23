@@ -13,7 +13,8 @@ let sidebarEl = null;
 let signature = '';
 let parts = {};
 let weatherTimer = 0;
-let sideTimers = [];
+let secondTimer = 0;
+let slowTimer = 0;
 
 /* --------------------------------------------------------------- 初始化 */
 
@@ -23,13 +24,20 @@ export function initWidgets() {
   store.subscribe(onChange);
   startWeatherTimer();
   const refreshOnVisible = () => {
+    if (document.hidden) {
+      // 后台标签页不每秒改 DOM：不做无意义的布局和绘制
+      stopSideTimers();
+      return;
+    }
     // 标签页可能在后台待了几个小时：回到前台时若缓存过期就补一次
-    if (!document.hidden && store.state.config.layout.showWeather) loadWeather(false);
+    if (store.state.config.layout.showWeather) loadWeather(false);
+    repaintSide();
+    startSideTimers();
   };
   document.addEventListener('visibilitychange', refreshOnVisible);
   return () => {
     clearInterval(weatherTimer);
-    clearSideTimers();
+    stopSideTimers();
     document.removeEventListener('visibilitychange', refreshOnVisible);
   };
 }
@@ -42,6 +50,7 @@ function onChange(scope) {
   else if (scope === 'pomodoro') parts.pomodoro?.__paint?.();
   else if (scope === 'countdown') parts.countdown?.__paint?.();
   else if (scope === 'worldClocks') rebuild(true);
+  else if (scope === 'notes') parts.notes?.__syncNotes?.();
 }
 
 function widgetConfig() {
@@ -65,9 +74,40 @@ function makeSignature() {
     .join('');
 }
 
-function clearSideTimers() {
-  for (const timer of sideTimers) clearInterval(timer);
-  sideTimers = [];
+/** 侧栏可见且页面在前台时，秒级/分钟级的刷新才有意义 */
+function sidebarActive() {
+  return Boolean(sidebarEl) && !document.hidden && !sidebarEl.classList.contains('is-hidden');
+}
+
+function stopSideTimers() {
+  clearInterval(secondTimer);
+  clearInterval(slowTimer);
+  secondTimer = 0;
+  slowTimer = 0;
+}
+
+function startSideTimers() {
+  stopSideTimers();
+  if (!sidebarActive()) return;
+  // 两个秒级组件共用一个 ticker：少一个定时器，也不会同一帧里连做两次布局
+  if (parts.pomodoro || parts.countdown) {
+    secondTimer = setInterval(() => {
+      if (!sidebarActive()) return;
+      parts.pomodoro?.__tick?.();
+      parts.countdown?.__tick?.();
+    }, 1000);
+  }
+  if (parts.worldClock) {
+    slowTimer = setInterval(() => {
+      if (sidebarActive()) parts.worldClock.__paint?.();
+    }, 30 * 1000);
+  }
+}
+
+function repaintSide() {
+  parts.pomodoro?.__paint?.();
+  parts.countdown?.__paint?.();
+  parts.worldClock?.__paint?.();
 }
 
 function rebuild(force = false) {
@@ -78,7 +118,7 @@ function rebuild(force = false) {
   }
   signature = next;
   parts = {};
-  clearSideTimers();
+  stopSideTimers();
   clear(sidebarEl);
 
   if (store.state.config.layout.showWeather) {
@@ -115,6 +155,7 @@ function rebuild(force = false) {
   }
 
   updateSidebarVisibility();
+  startSideTimers();
   if (store.state.config.layout.showWeather) loadWeather(false);
 }
 
@@ -129,12 +170,21 @@ function updateSidebarVisibility() {
     widgetConfig().worldClock ||
     widgetConfig().countdown;
   const hidden = !hasAny || store.state.config.sidebar === 'hidden';
+  const wasHidden = sidebarEl.classList.contains('is-hidden');
   sidebarEl.classList.toggle('is-hidden', hidden);
   // 侧栏只是宽度归零 + 透明；不 inert 的话，Tab 仍会钻进看不见的按钮
   if (hidden && sidebarEl.contains(document.activeElement)) document.activeElement.blur?.();
   sidebarEl.inert = hidden;
   sidebarEl.setAttribute('aria-hidden', String(hidden));
   sidebarEl.classList.toggle('is-left', store.state.config.sidebar === 'left');
+  if (hidden) {
+    // 收起的侧栏没人看：不要再每秒改 DOM 触发布局
+    stopSideTimers();
+  } else if (wasHidden) {
+    // 重新展开时立即补一帧，否则会停在收起前的时间
+    repaintSide();
+    startSideTimers();
+  }
 }
 
 /* --------------------------------------------------------------- 天气 */
@@ -423,7 +473,8 @@ function buildPomodoroCard() {
     timeEl.textContent = formatPomo(left);
     toggle.textContent = pomodoro.running ? '暂停' : '开始';
     toggle.setAttribute('aria-label', `${pomodoro.running ? '暂停' : '开始'}${pomodoro.phase === 'break' ? '休息' : '专注'}计时`);
-    bar.style.width = `${Math.min(100, Math.max(0, (1 - left / total) * 100))}%`;
+    // 用 transform 而不是 width：进度条每秒推进时不会触发重排
+    bar.style.transform = `scaleX(${Math.min(1, Math.max(0, 1 - left / total))})`;
     card.classList.toggle('is-break', pomodoro.phase === 'break');
     card.classList.toggle('is-running', pomodoro.running);
   };
@@ -445,19 +496,16 @@ function buildPomodoroCard() {
     )
   );
   card.__paint = paint;
+  card.__tick = () => {
+    const pomodoro = store.state.pomodoro;
+    if (!pomodoro.running) return;
+    if (pomodoroLeft(pomodoro) <= 0) {
+      finishPomodoro();
+      return;
+    }
+    paint();
+  };
   paint();
-
-  sideTimers.push(
-    setInterval(() => {
-      const pomodoro = store.state.pomodoro;
-      if (!pomodoro.running) return;
-      if (pomodoroLeft(pomodoro) <= 0) {
-        finishPomodoro();
-        return;
-      }
-      paint();
-    }, 1000)
-  );
   return card;
 }
 
@@ -622,7 +670,6 @@ function buildWorldClockCard() {
   );
   card.__paint = paint;
   paint();
-  sideTimers.push(setInterval(paint, 30 * 1000));
   return card;
 }
 
@@ -735,6 +782,7 @@ function buildCountdownCard() {
   const paint = () => {
     const countdown = store.state.countdown || { title: '', target: 0 };
     clear(body);
+    card.dataset.done = '0';
     if (!countdown.target) {
       body.appendChild(
         h(
@@ -749,6 +797,7 @@ function buildCountdownCard() {
     }
     clearBtn.style.display = '';
     const left = formatCountdown(countdown.target);
+    card.dataset.done = left.done ? '1' : '0';
     body.appendChild(
       h(
         'div',
@@ -799,8 +848,14 @@ function buildCountdownCard() {
     body
   );
   card.__paint = paint;
+  card.__tick = () => {
+    const countdown = store.state.countdown || { target: 0 };
+    if (!countdown.target) return;
+    // 到期后不再每秒重绘，保持「时间到了」静态显示
+    if (countdown.target <= Date.now() && card.dataset.done === '1') return;
+    paint();
+  };
   paint();
-  sideTimers.push(setInterval(paint, 1000));
   return card;
 }
 
@@ -960,12 +1015,20 @@ function buildNotesCard() {
     markSaved();
   });
 
-  return h(
+  const card = h(
     'div',
     { class: 'card is-notes' },
     h('div', { class: 'card-head' }, title, status),
     area
   );
+
+  // 命令面板的「note …」、其它标签页的修改都走这里同步，避免便签区显示旧内容
+  card.__syncNotes = () => {
+    const next = store.state.notes || '';
+    if (document.activeElement !== area && area.value !== next) area.value = next;
+  };
+
+  return card;
 }
 
 /* ----------------------------------------------------- 书签 / 常去网站 */
