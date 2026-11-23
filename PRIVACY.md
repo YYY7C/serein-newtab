@@ -11,7 +11,7 @@
 - 没有账号系统，没有登录
 - 没有服务器，没有云端同步
 - 没有统计、埋点、崩溃上报或广告 SDK
-- 不读取、不记录你的浏览历史（除非你在设置里主动开启「从书签导入」或「常去网站」小组件，见第三节）
+- 不读取、不记录你的浏览历史（除非你在设置里主动开启「常去网站」或命令面板的历史搜索，见第三节）
 - 不会把你的快捷方式链接改写成推广 / 联盟链接
 
 ## 二、数据存在哪里
@@ -21,7 +21,7 @@
 | 内容 | 存储位置 |
 |---|---|
 | 配置、快捷方式、文件夹、待办、便签、最近搜索词 | `localStorage`（键 `serein.state.v1`） |
-| 你上传的壁纸、自定义图标 | IndexedDB（`serein-assets`） |
+| 你上传的壁纸、自定义图标、自定义字体 | IndexedDB（`serein-assets`） |
 | 兜底镜像（防止缓存被清理丢配置） | `chrome.storage.local` |
 
 卸载扩展或在扩展管理页清除数据，上述内容即被删除。设置里的「导出」会生成一个 zip 备份（含配置与图片），由你自己保管；备份过程不经过任何服务器。
@@ -32,10 +32,12 @@
 
 | 权限 | 触发时机 | 用途 |
 |---|---|---|
-| `bookmarks` | 设置 → 数据 → 从书签导入 | 读取本地书签，一次性导入为快捷方式 |
+| `bookmarks` | 设置 → 数据 → 从书签导入；或授权命令面板搜书签 | 读取本地书签，导入为快捷方式或参与命令面板搜索 |
 | `topSites` | 设置 → 小组件 → 常去网站 | 读取浏览器本地统计的常去站点，仅显示在侧栏 |
+| `tabs` | 设置 → 搜索 → 搜索打开的标签页；或命令面板 `tab` | 读取已打开标签页的标题与地址，用于快速跳转；不读取页面内容 |
+| `history` | 设置 → 搜索 → 搜索浏览历史；或命令面板 `history` | 读取本机浏览历史标题与地址，用于命令面板搜索；不上传 |
 
-拒绝授权不影响其它功能，对应入口不会出现。
+拒绝授权不影响其它功能，对应入口会明确显示「安装扩展后可用」或「未授权」。所有可选权限都可以在设置里随时撤销。
 
 ## 四、会发出的网络请求
 
@@ -53,15 +55,17 @@
 | `api.open-meteo.com` | 天气小组件开启时 | 城市经纬度 |
 | `geocoding-api.open-meteo.com` | 在城市选择器里搜索城市时 | 输入的城市名 |
 
-搜索联想可以在设置里关闭；关闭后不会发出任何联想请求。「最近搜索」只保存在本机，可在设置中关闭记录或清除。
+搜索联想可以在设置里关闭；关闭后不会发出任何联想请求。「最近搜索」只保存在本机，可在设置中关闭记录或清除。自定义 CSS 默认移除 `@import`；如果你自己在 CSS 里写 `url(https://…)`，浏览器会加载该地址，这是用户主动行为。
 
 ## 五、权限用途
 
 | 权限 | 用途 |
 |---|---|
 | `storage` | 保存配置到本机 |
-| `unlimitedStorage` | 保存你上传的壁纸与图标（IndexedDB 默认配额不够） |
+| `unlimitedStorage` | 保存你上传的壁纸、图标与字体（IndexedDB 默认配额不够） |
 | `favicon` | 通过浏览器内置的 `_favicon` 读取**本地缓存**的网站图标，不联网 |
+| `tabs`（可选） | 命令面板搜索标签页时读取标签标题与地址；不读取页面内容、不注入脚本 |
+| `history`（可选） | 命令面板搜索历史时读取本机历史标题与地址；不上传 |
 
 ## 六、第三方
 
@@ -86,4 +90,4 @@
 
 # Privacy Policy (English summary)
 
-Serein New Tab is a browser extension that **collects no user data**. There is no account, no server, no analytics, and no cloud sync. Settings, shortcuts, todos and notes live in your browser's `localStorage`; uploaded wallpapers and icons live in IndexedDB. Optional permissions (`bookmarks`, `topSites`) are only requested when you explicitly use those features. Network requests are limited to the hosts listed above (Bing wallpaper/suggestions, Baidu/360/Google/DuckDuckGo/Bilibili suggestions, Open-Meteo weather), and never include identifiers. Recent search terms stay in local storage and can be turned off or cleared in Settings. Contact: the GitHub issues link above.
+Serein New Tab is a browser extension that **collects no user data**. There is no account, no server, no analytics, and no cloud sync. Settings, shortcuts, todos and notes live in your browser's `localStorage`; uploaded wallpapers and icons live in IndexedDB. Optional permissions (`bookmarks`, `topSites`, `tabs`, `history`) are only requested when you explicitly use those features and can be revoked in Settings. Network requests are limited to the hosts listed above (Bing wallpaper/suggestions, Baidu/360/Google/DuckDuckGo/Bilibili suggestions, Open-Meteo weather), and never include identifiers. Recent search terms stay in local storage and can be turned off or cleared in Settings. Contact: the GitHub issues link above.

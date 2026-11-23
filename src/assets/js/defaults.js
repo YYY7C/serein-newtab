@@ -7,7 +7,7 @@ import { uid, normalizeUrl, isUsableUrl, isSafeImageUrl } from './util.js';
 export const APP = {
   name: 'Serein',
   subtitle: '新标签页',
-  version: '1.4.0',
+  version: '1.5.0',
   schema: 1,
 };
 
@@ -210,7 +210,63 @@ export const ENGINES = [
   { id: 'github', name: 'GitHub', url: 'https://github.com/search?q=%s', color: '#24292F', letter: 'G', suggest: null },
 ];
 
-export const engineById = (id) => ENGINES.find((e) => e.id === id) || ENGINES[0];
+export const WALLPAPER_POOL_LIMIT = 20;
+export const WALLPAPER_ROTATIONS = ['off', 'newtab', 'hour', 'day'];
+
+export const CUSTOM_ENGINE_LIMIT = 12;
+export const CUSTOM_ENGINE_NAME_MAX = 24;
+export const CUSTOM_ENGINE_URL_MAX = 500;
+
+const CUSTOM_ENGINE_COLORS = [
+  '#6c8cff', '#7c5cff', '#a855f7', '#ec4899', '#f43f5e',
+  '#f97316', '#f59e0b', '#22c55e', '#14b8a6', '#0ea5e9',
+];
+
+/** 内置引擎 id 固定，导入的备份不能借此覆盖内置项 */
+export const isBuiltinEngine = (id) => ENGINES.some((engine) => engine.id === id);
+
+export const customEngines = (config) =>
+  Array.isArray(config?.search?.engines) ? config.search.engines : [];
+
+export const enginesFor = (config) => [...ENGINES, ...customEngines(config)];
+
+export const engineById = (id, config) =>
+  enginesFor(config).find((engine) => engine.id === id) || ENGINES[0];
+
+/**
+ * 校验并清洗用户自定义的搜索引擎。
+ * 地址必须是 http(s) 完整 URL 且含 %s 占位符；id 固定为 custom-*，避免冒充内置项。
+ */
+export function sanitizeCustomEngine(input) {
+  if (!input || typeof input !== 'object') return null;
+  const name = String(input.name ?? '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .slice(0, CUSTOM_ENGINE_NAME_MAX);
+  const rawUrl = String(input.url ?? '').trim().slice(0, CUSTOM_ENGINE_URL_MAX);
+  if (!name || !rawUrl.includes('%s')) return null;
+  const url = normalizeUrl(rawUrl);
+  if (!/^https?:\/\//i.test(url) || !isUsableUrl(url)) return null;
+
+  const id =
+    typeof input.id === 'string' && /^custom-[a-z0-9-]{1,40}$/.test(input.id)
+      ? input.id
+      : `custom-${uid()}`;
+  const color =
+    CUSTOM_ENGINE_COLORS[
+      Array.from(name).reduce((sum, char) => sum + (char.codePointAt(0) || 0), 0) % CUSTOM_ENGINE_COLORS.length
+    ];
+
+  return {
+    id,
+    name,
+    url,
+    custom: true,
+    color,
+    letter: Array.from(name)[0].toUpperCase(),
+    suggest: null,
+  };
+}
 
 /** 最近搜索最多留几条、单条最长多少字符（联想面板与配置迁移共用） */
 export const RECENT_SEARCH_LIMIT = 8;
@@ -291,6 +347,10 @@ export function createDefaultState() {
       animations: true,
       performance: false,
       fontScale: 1,
+      /** 用户自定义 CSS：落盘时保留原文，应用前统一清洗 @import 等 */
+      customCss: '',
+      /** 自定义字体：{ id, name }，文件存 IndexedDB 的 font:<id> */
+      customFont: { id: '', name: '' },
 
       background: {
         type: 'gradient',
@@ -306,6 +366,11 @@ export function createDefaultState() {
         veilByStyle: {},
         vignette: true,
         tone: 'auto',
+        /** 本地壁纸池：[{ id, name, addedAt }]，最多 20 张 */
+        pool: [],
+        /** 轮换时机：off / newtab / hour / day */
+        rotation: 'off',
+        rotatedAt: 0,
       },
 
       layout: {
@@ -329,6 +394,8 @@ export function createDefaultState() {
 
       search: {
         engine: 'baidu',
+        // 自定义引擎：{ id: 'custom-*', name, url（含 %s）, color, letter }
+        engines: [],
         suggestions: true,
         openInNewTab: false,
         // 最近搜索只存在本机；关掉开关后不再记录，已有记录可在设置里清除
@@ -347,6 +414,9 @@ export function createDefaultState() {
         notes: true,
         bookmarks: false,
         topSites: false,
+        pomodoro: false,
+        worldClock: false,
+        countdown: false,
       },
 
       sidebar: 'right',
@@ -366,6 +436,9 @@ export function createDefaultState() {
       { id: 'seed-todo-2', text: '把常用的图标拖进文件夹试试', done: false, createdAt: Date.now() + 1 },
     ],
     notes: '',
+    worldClocks: ['America/New_York', 'Europe/London', 'Asia/Tokyo'],
+    pomodoro: { phase: 'focus', remaining: 25 * 60, endsAt: 0, running: false },
+    countdown: { title: '', target: 0 },
     weather: {
       city: '北京',
       lat: 39.9042,
@@ -593,9 +666,59 @@ export function migrate(raw) {
     merged.config.background.gradient = defaults.config.background.gradient;
   }
   if (!['auto', 'dark', 'light'].includes(merged.config.background.tone)) merged.config.background.tone = 'auto';
+  {
+    // 壁纸池来自导入文件：只认合法 id 与简短名字，避免把任意对象带进 IndexedDB key
+    const rawPool = Array.isArray(raw.config?.background?.pool) ? raw.config.background.pool : [];
+    const seen = new Set();
+    const pool = [];
+    for (const item of rawPool) {
+      const id = String(item?.id ?? '').trim();
+      if (!/^[a-z0-9_-]{6,64}$/i.test(id) || seen.has(id)) continue;
+      seen.add(id);
+      pool.push({
+        id,
+        name: String(item?.name ?? '本地壁纸').trim().slice(0, 40) || '本地壁纸',
+        addedAt: Number.isFinite(Number(item?.addedAt)) ? Number(item.addedAt) : Date.now(),
+      });
+      if (pool.length >= WALLPAPER_POOL_LIMIT) break;
+    }
+    const legacyId = String(raw.config?.background?.fileId ?? '').trim();
+    if (legacyId && /^[a-z0-9_-]{6,64}$/i.test(legacyId) && !seen.has(legacyId) && pool.length < WALLPAPER_POOL_LIMIT) {
+      pool.unshift({ id: legacyId, name: '本地壁纸', addedAt: Date.now() });
+      seen.add(legacyId);
+    }
+    merged.config.background.pool = pool;
+    if (!pool.some((item) => item.id === merged.config.background.fileId)) {
+      merged.config.background.fileId = pool[0]?.id || '';
+    }
+  }
+  if (!WALLPAPER_ROTATIONS.includes(merged.config.background.rotation)) {
+    merged.config.background.rotation = 'off';
+  }
+  merged.config.background.rotatedAt = Number.isFinite(toFiniteNumber(merged.config.background.rotatedAt))
+    ? Math.max(0, Number(merged.config.background.rotatedAt))
+    : 0;
   if (!['right', 'left', 'hidden'].includes(merged.config.sidebar)) merged.config.sidebar = defaults.config.sidebar;
   if (!['right', 'left'].includes(merged.config.lastSidebar)) merged.config.lastSidebar = 'right';
-  if (!ENGINES.some((engine) => engine.id === merged.config.search.engine)) {
+  {
+    // 自定义引擎来自导入文件：只保留校验通过、id/地址不重复的前 N 个
+    const rawEngines = Array.isArray(raw.config?.search?.engines) ? raw.config.search.engines : [];
+    const seenIds = new Set();
+    const seenUrls = new Set();
+    const engines = [];
+    for (const item of rawEngines) {
+      const engine = sanitizeCustomEngine(item);
+      if (!engine) continue;
+      const urlKey = engine.url.toLowerCase();
+      if (seenIds.has(engine.id) || seenUrls.has(urlKey)) continue;
+      seenIds.add(engine.id);
+      seenUrls.add(urlKey);
+      engines.push(engine);
+      if (engines.length >= CUSTOM_ENGINE_LIMIT) break;
+    }
+    merged.config.search.engines = engines;
+  }
+  if (!enginesFor(merged.config).some((engine) => engine.id === merged.config.search.engine)) {
     merged.config.search.engine = defaults.config.search.engine;
   }
   {
@@ -617,6 +740,17 @@ export function migrate(raw) {
   }
   if (typeof merged.config.accent !== 'string' || !/^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(merged.config.accent)) {
     merged.config.accent = defaults.config.accent;
+  }
+  merged.config.customCss =
+    typeof merged.config.customCss === 'string' ? merged.config.customCss.slice(0, 20000) : '';
+  {
+    const rawFont = isPlainObject(raw.config?.customFont) ? raw.config.customFont : {};
+    const id = typeof rawFont.id === 'string' ? rawFont.id.trim() : '';
+    merged.config.customFont = {
+      id: /^[a-z0-9_-]{6,64}$/i.test(id) ? id : '',
+      name: typeof rawFont.name === 'string' ? rawFont.name.trim().slice(0, 60) : '',
+    };
+    if (!merged.config.customFont.id) merged.config.customFont.name = '';
   }
   if (
     typeof merged.config.background.color !== 'string' ||
@@ -692,6 +826,9 @@ export function migrate(raw) {
     ['config.widgets', 'notes'],
     ['config.widgets', 'bookmarks'],
     ['config.widgets', 'topSites'],
+    ['config.widgets', 'pomodoro'],
+    ['config.widgets', 'worldClock'],
+    ['config.widgets', 'countdown'],
   ];
   for (const [path, key] of booleanFields) {
     let node = merged;
@@ -701,6 +838,47 @@ export function migrate(raw) {
       fallback = fallback[part];
     }
     node[key] = toBoolean(node[key], fallback[key]);
+  }
+
+  {
+    // 老数据没有这个字段时保留默认三城；显式保存空数组才视为「用户清空」
+    const rawZones = Array.isArray(raw.worldClocks) ? raw.worldClocks : defaults.worldClocks;
+    const zones = [];
+    for (const zone of rawZones) {
+      if (typeof zone !== 'string' || zones.includes(zone)) continue;
+      try {
+        new Intl.DateTimeFormat('zh-CN', { timeZone: zone }).format(0);
+      } catch {
+        continue;
+      }
+      zones.push(zone);
+      if (zones.length >= 6) break;
+    }
+    merged.worldClocks = zones;
+  }
+  {
+    const rawPomodoro = isPlainObject(raw.pomodoro) ? raw.pomodoro : {};
+    const phase = rawPomodoro.phase === 'break' ? 'break' : 'focus';
+    const fallbackSeconds = phase === 'break' ? 5 * 60 : 25 * 60;
+    const remaining = toFiniteNumber(rawPomodoro.remaining);
+    const endsAt = toFiniteNumber(rawPomodoro.endsAt);
+    merged.pomodoro = {
+      phase,
+      remaining: Number.isFinite(remaining)
+        ? Math.min(3600, Math.max(0, Math.round(remaining)))
+        : fallbackSeconds,
+      endsAt: Number.isFinite(endsAt) ? Math.max(0, Math.round(endsAt)) : 0,
+      running: rawPomodoro.running === true,
+    };
+    if (merged.pomodoro.running && merged.pomodoro.endsAt <= 0) merged.pomodoro.running = false;
+  }
+  {
+    const rawCountdown = isPlainObject(raw.countdown) ? raw.countdown : {};
+    const target = toFiniteNumber(rawCountdown.target);
+    merged.countdown = {
+      title: typeof rawCountdown.title === 'string' ? rawCountdown.title.trim().slice(0, 60) : '',
+      target: Number.isFinite(target) ? Math.max(0, Math.trunc(target)) : 0,
+    };
   }
 
   return merged;

@@ -8,7 +8,7 @@
 
 import { $, normalizeUrl, isSafeImageUrl } from './util.js';
 import { files, trackObjectUrl, revokeObjectUrl } from './storage.js';
-import { gradientById } from './defaults.js';
+import { GRADIENTS, gradientById } from './defaults.js';
 import { styleTone } from './theme.js';
 import * as store from './store.js';
 
@@ -24,11 +24,68 @@ let currentImageSrc = '';
 let backgroundToken = 0;
 const toneCache = new Map();
 
+const ROTATION_INTERVALS = { hour: 3600 * 1000, day: 24 * 3600 * 1000 };
+
 export function initBackground(store) {
   mediaEl = $('#bg-media');
   veilEl = $('#bg-veil');
   vignetteEl = $('#bg-vignette');
+  rotateIfDue(store.state);
   return applyBackground(store.state);
+}
+
+/* --------------------------------------------------------------- 轮换 */
+
+/** 在当前来源内部换下一张；返回是否真的换了 */
+function rotateNext(bg) {
+  if (bg.type === 'file') {
+    const pool = Array.isArray(bg.pool) ? bg.pool : [];
+    if (pool.length < 2) return false;
+    const index = pool.findIndex((item) => item.id === bg.fileId);
+    bg.fileId = pool[(index + 1 + pool.length) % pool.length].id;
+    return true;
+  }
+  if (bg.type === 'bing') {
+    bg.bing = { ...(bg.bing || {}), idx: (((bg.bing?.idx ?? 0) + 1) % 8), date: '' };
+    return true;
+  }
+  if (bg.type === 'gradient') {
+    const index = GRADIENTS.findIndex((preset) => preset.id === bg.gradient);
+    bg.gradient = GRADIENTS[(index + 1) % GRADIENTS.length].id;
+    return true;
+  }
+  return false;
+}
+
+/** 立即换一张（设置页按钮也走这里） */
+export function rotateWallpaperNow(state) {
+  const bg = state.config.background;
+  if (!rotateNext(bg)) return false;
+  bg.rotatedAt = Date.now();
+  try {
+    sessionStorage.setItem('serein:wallpaper-rotated', String(Date.now()));
+  } catch {
+    /* 无痕窗口可能禁用 sessionStorage */
+  }
+  store.persist();
+  return true;
+}
+
+/** 新标签页启动时调用：按配置决定要不要先换一张再渲染 */
+export function rotateIfDue(state) {
+  const bg = state.config.background;
+  const mode = bg.rotation || 'off';
+  if (mode === 'off') return false;
+  if (mode === 'newtab') {
+    try {
+      if (sessionStorage.getItem('serein:wallpaper-rotated')) return false;
+    } catch {
+      /* 读不到就按未轮换处理 */
+    }
+  }
+  const interval = ROTATION_INTERVALS[mode];
+  if (interval && Number(bg.rotatedAt) > 0 && Date.now() - Number(bg.rotatedAt) < interval) return false;
+  return rotateWallpaperNow(state);
 }
 
 function releaseCurrentFile() {

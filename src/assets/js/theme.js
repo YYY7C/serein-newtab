@@ -115,6 +115,39 @@ export function applyConfig(state) {
   /* 内容垂直居中 */
   const content = document.getElementById('content');
   if (content) content.classList.toggle('is-top', layout.verticalCenter === false);
+
+  applyCustomCss(config.customCss);
+}
+
+/* ---------------------------------------------------------- 自定义 CSS */
+
+export const CUSTOM_CSS_MAX = 20000;
+
+/** @import 会引入远程样式并泄露访问意图；javascript: / expression 属于历史执行面 */
+export function sanitizeCustomCss(input) {
+  return String(input ?? '')
+    .replace(/\r\n?/g, '\n')
+    .slice(0, CUSTOM_CSS_MAX)
+    .replace(/@import[\s\S]*?;/gi, '')
+    .replace(/expression\s*\(/gi, '')
+    .replace(/javascript\s*:/gi, '');
+}
+
+let customCssNode = null;
+
+export function applyCustomCss(input) {
+  const text = sanitizeCustomCss(input);
+  if (!text.trim()) {
+    customCssNode?.remove();
+    customCssNode = null;
+    return;
+  }
+  if (!customCssNode || !customCssNode.isConnected) {
+    customCssNode = document.createElement('style');
+    customCssNode.id = 'custom-css';
+    document.head.appendChild(customCssNode);
+  }
+  if (customCssNode.textContent !== text) customCssNode.textContent = text;
 }
 
 /**

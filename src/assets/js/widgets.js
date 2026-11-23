@@ -13,6 +13,7 @@ let sidebarEl = null;
 let signature = '';
 let parts = {};
 let weatherTimer = 0;
+let sideTimers = [];
 
 /* --------------------------------------------------------------- 初始化 */
 
@@ -28,6 +29,7 @@ export function initWidgets() {
   document.addEventListener('visibilitychange', refreshOnVisible);
   return () => {
     clearInterval(weatherTimer);
+    clearSideTimers();
     document.removeEventListener('visibilitychange', refreshOnVisible);
   };
 }
@@ -37,6 +39,9 @@ function onChange(scope) {
   else if (scope === 'config') rebuild();
   else if (scope === 'weather') updateWeather();
   else if (scope === 'todos') renderTodoList();
+  else if (scope === 'pomodoro') parts.pomodoro?.__paint?.();
+  else if (scope === 'countdown') parts.countdown?.__paint?.();
+  else if (scope === 'worldClocks') rebuild(true);
 }
 
 function widgetConfig() {
@@ -46,9 +51,23 @@ function widgetConfig() {
 function makeSignature() {
   const widgets = widgetConfig();
   const layout = store.state.config.layout;
-  return [widgets.todo, widgets.notes, widgets.bookmarks, widgets.topSites, layout.showWeather]
+  return [
+    widgets.todo,
+    widgets.notes,
+    widgets.bookmarks,
+    widgets.topSites,
+    widgets.pomodoro,
+    widgets.worldClock,
+    widgets.countdown,
+    layout.showWeather,
+  ]
     .map((value) => (value ? '1' : '0'))
     .join('');
+}
+
+function clearSideTimers() {
+  for (const timer of sideTimers) clearInterval(timer);
+  sideTimers = [];
 }
 
 function rebuild(force = false) {
@@ -59,6 +78,7 @@ function rebuild(force = false) {
   }
   signature = next;
   parts = {};
+  clearSideTimers();
   clear(sidebarEl);
 
   if (store.state.config.layout.showWeather) {
@@ -68,6 +88,18 @@ function rebuild(force = false) {
   if (widgetConfig().todo) {
     parts.todo = buildTodoCard();
     sidebarEl.appendChild(parts.todo);
+  }
+  if (widgetConfig().pomodoro) {
+    parts.pomodoro = buildPomodoroCard();
+    sidebarEl.appendChild(parts.pomodoro);
+  }
+  if (widgetConfig().countdown) {
+    parts.countdown = buildCountdownCard();
+    sidebarEl.appendChild(parts.countdown);
+  }
+  if (widgetConfig().worldClock) {
+    parts.worldClock = buildWorldClockCard();
+    sidebarEl.appendChild(parts.worldClock);
   }
   if (widgetConfig().notes) {
     parts.notes = buildNotesCard();
@@ -92,7 +124,10 @@ function updateSidebarVisibility() {
     widgetConfig().todo ||
     widgetConfig().notes ||
     widgetConfig().bookmarks ||
-    widgetConfig().topSites;
+    widgetConfig().topSites ||
+    widgetConfig().pomodoro ||
+    widgetConfig().worldClock ||
+    widgetConfig().countdown;
   const hidden = !hasAny || store.state.config.sidebar === 'hidden';
   sidebarEl.classList.toggle('is-hidden', hidden);
   // 侧栏只是宽度归零 + 透明；不 inert 的话，Tab 仍会钻进看不见的按钮
@@ -311,6 +346,462 @@ async function openCityPicker() {
     // 用户可能在 80ms 内就关掉了弹窗
     if (input.isConnected && input.closest('.modal.is-open')) input.focus();
   }, 80);
+}
+
+/* --------------------------------------------------------------- 专注 */
+
+const POMO_SECONDS = { focus: 25 * 60, break: 5 * 60 };
+
+const formatPomo = (seconds) => {
+  const left = Math.max(0, Math.round(seconds));
+  return `${String(Math.floor(left / 60)).padStart(2, '0')}:${String(left % 60).padStart(2, '0')}`;
+};
+
+function pomodoroLeft(pomodoro) {
+  if (pomodoro.running) return Math.max(0, Math.ceil((pomodoro.endsAt - Date.now()) / 1000));
+  return Math.max(0, Number(pomodoro.remaining) || 0);
+}
+
+function finishPomodoro() {
+  const pomodoro = store.state.pomodoro;
+  const next = pomodoro.phase === 'focus' ? 'break' : 'focus';
+  pomodoro.phase = next;
+  pomodoro.remaining = POMO_SECONDS[next];
+  pomodoro.endsAt = 0;
+  pomodoro.running = false;
+  store.commit('pomodoro');
+  bus.emit('toast', {
+    text: next === 'break' ? '专注完成，休息 5 分钟' : '休息结束，继续专注',
+  });
+}
+
+function buildPomodoroCard() {
+  const card = h('div', { class: 'card is-pomodoro' });
+  const reset = h('button', {
+    class: 'card-action',
+    type: 'button',
+    title: '重置',
+    'aria-label': '重置专注计时',
+    html: svgIcon('refresh', 14),
+    onclick: () => {
+      const pomodoro = store.state.pomodoro;
+      pomodoro.phase = 'focus';
+      pomodoro.remaining = POMO_SECONDS.focus;
+      pomodoro.endsAt = 0;
+      pomodoro.running = false;
+      store.commit('pomodoro');
+    },
+  });
+  const phaseEl = h('div', { class: 'pomo-phase', text: '专注' });
+  const timeEl = h('div', { class: 'pomo-time', text: '25:00' });
+  const bar = h('i');
+  const toggle = h('button', {
+    class: 'btn is-primary pomo-toggle',
+    type: 'button',
+    text: '开始',
+    onclick: () => {
+      const pomodoro = store.state.pomodoro;
+      if (pomodoro.running) {
+        pomodoro.remaining = pomodoroLeft(pomodoro);
+        pomodoro.running = false;
+        pomodoro.endsAt = 0;
+      } else {
+        const seconds = pomodoro.remaining > 0 ? pomodoro.remaining : POMO_SECONDS[pomodoro.phase];
+        pomodoro.remaining = seconds;
+        pomodoro.endsAt = Date.now() + seconds * 1000;
+        pomodoro.running = true;
+      }
+      store.commit('pomodoro');
+    },
+  });
+
+  const paint = () => {
+    const pomodoro = store.state.pomodoro;
+    const left = pomodoroLeft(pomodoro);
+    const total = POMO_SECONDS[pomodoro.phase] || POMO_SECONDS.focus;
+    phaseEl.textContent = pomodoro.phase === 'break' ? '休息' : '专注';
+    timeEl.textContent = formatPomo(left);
+    toggle.textContent = pomodoro.running ? '暂停' : '开始';
+    toggle.setAttribute('aria-label', `${pomodoro.running ? '暂停' : '开始'}${pomodoro.phase === 'break' ? '休息' : '专注'}计时`);
+    bar.style.width = `${Math.min(100, Math.max(0, (1 - left / total) * 100))}%`;
+    card.classList.toggle('is-break', pomodoro.phase === 'break');
+    card.classList.toggle('is-running', pomodoro.running);
+  };
+
+  card.append(
+    h(
+      'div',
+      { class: 'card-head' },
+      h('div', { class: 'card-title' }, h('span', { html: svgIcon('timer', 14) }), h('span', { text: '专注' })),
+      reset
+    ),
+    h(
+      'div',
+      { class: 'pomo-body' },
+      phaseEl,
+      timeEl,
+      h('div', { class: 'pomo-bar' }, bar),
+      h('div', { class: 'pomo-actions' }, toggle)
+    )
+  );
+  card.__paint = paint;
+  paint();
+
+  sideTimers.push(
+    setInterval(() => {
+      const pomodoro = store.state.pomodoro;
+      if (!pomodoro.running) return;
+      if (pomodoroLeft(pomodoro) <= 0) {
+        finishPomodoro();
+        return;
+      }
+      paint();
+    }, 1000)
+  );
+  return card;
+}
+
+/* ------------------------------------------------------------- 世界时钟 */
+
+const WORLD_CITIES = [
+  { tz: 'America/New_York', label: '纽约' },
+  { tz: 'America/Los_Angeles', label: '洛杉矶' },
+  { tz: 'America/Sao_Paulo', label: '圣保罗' },
+  { tz: 'Europe/London', label: '伦敦' },
+  { tz: 'Europe/Paris', label: '巴黎' },
+  { tz: 'Europe/Berlin', label: '柏林' },
+  { tz: 'Europe/Moscow', label: '莫斯科' },
+  { tz: 'Asia/Dubai', label: '迪拜' },
+  { tz: 'Asia/Singapore', label: '新加坡' },
+  { tz: 'Asia/Tokyo', label: '东京' },
+  { tz: 'Asia/Seoul', label: '首尔' },
+  { tz: 'Australia/Sydney', label: '悉尼' },
+];
+
+const cityLabel = (tz) =>
+  WORLD_CITIES.find((city) => city.tz === tz)?.label || String(tz).split('/').pop().replace(/_/g, ' ');
+
+function dateKeyInZone(date, timeZone) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+}
+
+function dayTag(zoneKey, localKey) {
+  const asDay = (key) => {
+    const [year, month, day] = key.split('-').map(Number);
+    return Date.UTC(year, month - 1, day);
+  };
+  const diff = Math.round((asDay(zoneKey) - asDay(localKey)) / 86400000);
+  if (diff === 0) return '今天';
+  if (diff === 1) return '明天';
+  if (diff === -1) return '昨天';
+  return diff > 0 ? `+${diff} 天` : `${diff} 天`;
+}
+
+async function editWorldClocks() {
+  const zones = Array.isArray(store.state.worldClocks) ? [...store.state.worldClocks] : [];
+  const boxes = WORLD_CITIES.map((city) => {
+    const input = h('input', {
+      type: 'checkbox',
+      value: city.tz,
+      checked: zones.includes(city.tz),
+      'aria-label': city.label,
+    });
+    return {
+      city,
+      input,
+      row: h(
+        'label',
+        { class: 'world-city-option' },
+        input,
+        h('span', { text: city.label }),
+        h('span', { class: 'field-hint', text: city.tz })
+      ),
+    };
+  });
+  const syncLimit = () => {
+    const count = boxes.filter((item) => item.input.checked).length;
+    for (const item of boxes) item.input.disabled = !item.input.checked && count >= 6;
+  };
+  boxes.forEach((item) => item.input.addEventListener('change', syncLimit));
+  syncLimit();
+
+  const body = h(
+    'div',
+    {},
+    h('div', { class: 'field-hint', text: '最多选择 6 个城市，卡片每秒刷新一次。' }),
+    h('div', { class: 'world-city-grid' }, ...boxes.map((item) => item.row))
+  );
+  const { openModal } = await import('./modals.js');
+  const modal = openModal({
+    title: '选择世界时钟城市',
+    body,
+    footer: [
+      h('button', { class: 'btn', type: 'button', text: '取消', onclick: () => modal.close() }),
+      h('button', {
+        class: 'btn is-primary',
+        type: 'button',
+        text: '保存',
+        onclick: () => {
+          store.state.worldClocks = boxes.filter((item) => item.input.checked).map((item) => item.city.tz);
+          modal.close();
+          store.commit('worldClocks');
+        },
+      }),
+    ],
+  });
+}
+
+function buildWorldClockCard() {
+  const list = h('div', { class: 'worldclock-list' });
+  const edit = h('button', {
+    class: 'card-action',
+    type: 'button',
+    title: '选择城市',
+    'aria-label': '选择世界时钟城市',
+    html: svgIcon('compass', 14),
+    onclick: () => editWorldClocks(),
+  });
+
+  const paint = () => {
+    clear(list);
+    const zones = Array.isArray(store.state.worldClocks) ? store.state.worldClocks : [];
+    if (!zones.length) {
+      list.appendChild(
+        h(
+          'div',
+          { class: 'empty-state' },
+          h('div', { text: '还没有添加城市' }),
+          h('button', { class: 'btn is-ghost', type: 'button', text: '选择城市', onclick: () => editWorldClocks() })
+        )
+      );
+      return;
+    }
+    const now = new Date();
+    const localKey = dateKeyInZone(now, Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
+    for (const zone of zones) {
+      let time = '--:--';
+      let zoneKey = localKey;
+      try {
+        time = new Intl.DateTimeFormat('zh-CN', {
+          timeZone: zone,
+          hour: '2-digit',
+          minute: '2-digit',
+          hourCycle: 'h23',
+        }).format(now);
+        zoneKey = dateKeyInZone(now, zone);
+      } catch {
+        /* 时区数据缺失时保留占位 */
+      }
+      list.appendChild(
+        h(
+          'div',
+          { class: 'worldclock-row' },
+          h('span', { class: 'worldclock-name', text: cityLabel(zone) }),
+          h('span', { class: 'worldclock-day', text: dayTag(zoneKey, localKey) }),
+          h('span', { class: 'worldclock-time', text: time })
+        )
+      );
+    }
+  };
+
+  const card = h(
+    'div',
+    { class: 'card is-worldclock' },
+    h(
+      'div',
+      { class: 'card-head' },
+      h('div', { class: 'card-title' }, h('span', { html: svgIcon('compass', 14) }), h('span', { text: '世界时钟' })),
+      edit
+    ),
+    list
+  );
+  card.__paint = paint;
+  paint();
+  sideTimers.push(setInterval(paint, 30 * 1000));
+  return card;
+}
+
+/* --------------------------------------------------------------- 倒计时 */
+
+function formatCountdown(target) {
+  let left = Math.max(0, target - Date.now());
+  const days = Math.floor(left / 86400000);
+  left -= days * 86400000;
+  const hours = Math.floor(left / 3600000);
+  left -= hours * 3600000;
+  const minutes = Math.floor(left / 60000);
+  const seconds = Math.floor((left - minutes * 60000) / 1000);
+  return { days, hours, minutes, seconds, done: target <= Date.now() };
+}
+
+function localDateTimeValue(timestamp) {
+  const date = new Date(timestamp);
+  const pad = (value) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+async function editCountdown() {
+  const current = store.state.countdown || { title: '', target: 0 };
+  const titleInput = h('input', {
+    class: 'text-input',
+    type: 'text',
+    maxlength: '60',
+    value: current.title || '',
+    placeholder: '例如：项目截止',
+    'aria-label': '倒计时名称',
+  });
+  const dateInput = h('input', {
+    class: 'text-input',
+    type: 'datetime-local',
+    value: localDateTimeValue(current.target > Date.now() ? current.target : Date.now() + 3600000),
+    'aria-label': '倒计时时间',
+  });
+  const error = h('div', { class: 'field-error', role: 'alert', hidden: true });
+  const body = h(
+    'div',
+    {},
+    h('div', { class: 'field' }, h('label', { text: '名称' }), titleInput),
+    h('div', { class: 'field' }, h('label', { text: '目标时间' }), dateInput),
+    error
+  );
+  const { openModal } = await import('./modals.js');
+  let modal = null;
+  const save = () => {
+    const target = new Date(dateInput.value).getTime();
+    if (!Number.isFinite(target)) {
+      error.textContent = '请选择有效的日期与时间';
+      error.hidden = false;
+      return;
+    }
+    if (target <= Date.now()) {
+      error.textContent = '目标时间需要晚于现在';
+      error.hidden = false;
+      return;
+    }
+    const next = { title: titleInput.value.trim().slice(0, 60) || '倒计时', target };
+    store.state.countdown = next;
+    modal?.close();
+    store.commit('countdown');
+  };
+  titleInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      save();
+    }
+  });
+  dateInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      save();
+    }
+  });
+  modal = openModal({
+    title: current.target ? '编辑倒计时' : '新建倒计时',
+    body,
+    footer: [
+      h('button', { class: 'btn', type: 'button', text: '取消', onclick: () => modal.close() }),
+      h('button', { class: 'btn is-primary', type: 'button', text: '保存', onclick: save }),
+    ],
+  });
+}
+
+function buildCountdownCard() {
+  const body = h('div', { class: 'countdown-body' });
+  const edit = h('button', {
+    class: 'card-action',
+    type: 'button',
+    title: '编辑倒计时',
+    'aria-label': '编辑倒计时',
+    html: svgIcon('edit', 14),
+    onclick: () => editCountdown(),
+  });
+  const clearBtn = h('button', {
+    class: 'card-action',
+    type: 'button',
+    title: '清除倒计时',
+    'aria-label': '清除倒计时',
+    html: svgIcon('close', 14),
+    onclick: () => {
+      store.state.countdown = { title: '', target: 0 };
+      store.commit('countdown');
+    },
+  });
+
+  const paint = () => {
+    const countdown = store.state.countdown || { title: '', target: 0 };
+    clear(body);
+    if (!countdown.target) {
+      body.appendChild(
+        h(
+          'div',
+          { class: 'empty-state' },
+          h('div', { text: '还没有倒计时' }),
+          h('button', { class: 'btn is-ghost', type: 'button', text: '设置一个', onclick: () => editCountdown() })
+        )
+      );
+      clearBtn.style.display = 'none';
+      return;
+    }
+    clearBtn.style.display = '';
+    const left = formatCountdown(countdown.target);
+    body.appendChild(
+      h(
+        'div',
+        { class: `countdown${left.done ? ' is-done' : ''}` },
+        h('div', { class: 'countdown-title', text: countdown.title || '倒计时' }),
+        left.done
+          ? h('div', { class: 'countdown-done', text: '时间到了' })
+          : h(
+              'div',
+              { class: 'countdown-grid' },
+              ...[
+                [left.days, '天'],
+                [left.hours, '时'],
+                [left.minutes, '分'],
+                [left.seconds, '秒'],
+              ].map(([value, unit]) =>
+                h(
+                  'div',
+                  { class: 'countdown-cell' },
+                  h('span', { class: 'countdown-value', text: String(value).padStart(2, '0') }),
+                  h('span', { class: 'countdown-unit', text: unit })
+                )
+              )
+            ),
+        h('div', {
+          class: 'field-hint',
+          text: new Intl.DateTimeFormat('zh-CN', {
+            month: 'long',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hourCycle: 'h23',
+          }).format(new Date(countdown.target)),
+        })
+      )
+    );
+  };
+
+  const card = h(
+    'div',
+    { class: 'card is-countdown' },
+    h(
+      'div',
+      { class: 'card-head' },
+      h('div', { class: 'card-title' }, h('span', { html: svgIcon('timer', 14) }), h('span', { text: '倒计时' })),
+      h('div', { style: { display: 'flex', gap: '2px' } }, edit, clearBtn)
+    ),
+    body
+  );
+  card.__paint = paint;
+  paint();
+  sideTimers.push(setInterval(paint, 1000));
+  return card;
 }
 
 /* --------------------------------------------------------------- 待办 */

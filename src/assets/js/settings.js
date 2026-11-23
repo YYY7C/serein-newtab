@@ -3,13 +3,53 @@
  * 全屏浮层 + 左侧分区导航。所有改动即时生效，无需「保存」按钮。
  */
 
-import { h, clear, svgIcon, bus, debounce, relativeTime, formatBytes, normalizeUrl, isUsableUrl } from './util.js';
+import {
+  h,
+  clear,
+  svgIcon,
+  bus,
+  debounce,
+  relativeTime,
+  formatBytes,
+  normalizeUrl,
+  isUsableUrl,
+  prettyHost,
+} from './util.js';
 import * as store from './store.js';
 import { makeSwitch, makeSegmented, makeRange, makeStepper, shortcutEditor, confirmDialog, openModal } from './modals.js';
-import { GRADIENTS, ENGINES, APP, STYLES, styleById, RECENT_SEARCH_LIMIT } from './defaults.js';
-import { applyBackground, applyBackgroundLook, cycleBing, fetchBingGallery, saveLocalWallpaper, styleVeilPercent, STYLE_VEIL } from './wallpaper.js';
-import { applyConfig, dockWidth } from './theme.js';
-import { exportState, importState, resetAll, usageReport } from './data.js';
+import {
+  GRADIENTS,
+  APP,
+  STYLES,
+  styleById,
+  RECENT_SEARCH_LIMIT,
+  enginesFor,
+  sanitizeCustomEngine,
+  CUSTOM_ENGINE_LIMIT,
+  CUSTOM_ENGINE_NAME_MAX,
+  WALLPAPER_POOL_LIMIT,
+} from './defaults.js';
+import {
+  applyBackground,
+  applyBackgroundLook,
+  cycleBing,
+  fetchBingGallery,
+  saveLocalWallpaper,
+  dropLocalWallpaper,
+  rotateWallpaperNow,
+  styleVeilPercent,
+  STYLE_VEIL,
+} from './wallpaper.js';
+import { files } from './storage.js';
+import { applyConfig, applyCustomCss, dockWidth, CUSTOM_CSS_MAX } from './theme.js';
+import { applyCustomFont } from './custom-font.js';
+import { exportState, importState, exportTheme, importTheme, resetAll, usageReport } from './data.js';
+import {
+  hasPermissionApi,
+  permissionGranted,
+  requestPermission as requestOptionalPermission,
+  revokePermission,
+} from './quick.js';
 import { refreshClock } from './clock.js';
 import { resolveIcon, previewFileIcon } from './icons.js';
 
@@ -39,6 +79,13 @@ let isOpen = false;
 let lastFocus = null;
 // 壁纸可能很大，用户能在上传途中再次选图；只允许最后一次选择生效
 let wallpaperUploadSeq = 0;
+let fontUploadSeq = 0;
+let wallpaperPoolUrls = [];
+
+function releaseWallpaperPoolUrls() {
+  for (const url of wallpaperPoolUrls) URL.revokeObjectURL(url);
+  wallpaperPoolUrls = [];
+}
 let closeSeq = 0;
 // 读权限 + 遍历书签树是异步的，连点两次会导入两个同名文件夹
 let bookmarkImporting = false;
@@ -167,6 +214,7 @@ export function open(tab = 'appearance') {
 export function close() {
   if (!root || !isOpen) return;
   isOpen = false;
+  releaseWallpaperPoolUrls();
   const seq = ++closeSeq;
   delete document.documentElement.dataset.overlay;
   root.classList.remove('is-open');
@@ -286,6 +334,13 @@ const persist = debounce(() => store.commit('config'), 180);
 function touch({ render = false } = {}) {
   applyConfig(store.state);
   persist();
+  if (render) refreshClock();
+}
+
+/** 需要立刻确认落盘的操作（上传字体/壁纸、删除资产）：跳过 180ms 防抖 */
+function touchNow({ render = false } = {}) {
+  applyConfig(store.state);
+  store.commit('config');
   if (render) refreshClock();
 }
 
@@ -493,6 +548,192 @@ function buildAppearance() {
           touch();
         })
       )
+    ),
+    group(
+      '自定义字体',
+      (() => {
+        const current = config.customFont || { id: '', name: '' };
+        const status = h('div', {
+          class: 'field-hint',
+          text: current.id ? `当前：${current.name || '自定义字体'}` : '当前：系统字体',
+        });
+        const picker = h('input', {
+          type: 'file',
+          accept: '.woff2,.woff,.ttf,.otf,font/woff2,font/woff,font/ttf,font/otf',
+          style: { display: 'none' },
+          onchange: async (event) => {
+            const file = event.target.files?.[0];
+            event.target.value = '';
+            if (!file) return;
+            if (!/\.(woff2?|ttf|otf)$/i.test(file.name) && !/^font\//i.test(file.type)) {
+              bus.emit('toast', { text: '请选择 WOFF2 / WOFF / TTF / OTF 字体文件', error: true });
+              return;
+            }
+            if (file.size > 8 * 1024 * 1024) {
+              bus.emit('toast', { text: '字体文件超过 8 MB，请先压缩或裁剪字形', error: true });
+              return;
+            }
+            const seq = ++fontUploadSeq;
+            const id = `f${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+            if (!(await files.put(`font:${id}`, file))) {
+              bus.emit('toast', { text: '字体保存失败，请检查浏览器存储空间', error: true });
+              return;
+            }
+            if (seq !== fontUploadSeq) {
+              files.remove(`font:${id}`);
+              return;
+            }
+            const previous = config.customFont || { id: '', name: '' };
+            config.customFont = { id, name: file.name.slice(0, 60) };
+            await applyCustomFont(store.state);
+            touchNow();
+            if (!store.flushNow()) {
+              config.customFont = previous;
+              await applyCustomFont(store.state);
+              await files.remove(`font:${id}`);
+              bus.emit('toast', { text: '字体保存失败：本地存储写入异常', error: true });
+              return;
+            }
+            if (previous.id) await files.remove(`font:${previous.id}`);
+            selectSection('appearance');
+            bus.emit('toast', { text: '已应用自定义字体' });
+          },
+        });
+        return row(
+          '字体',
+          status,
+          h(
+            'div',
+            { class: 'btn-row' },
+            h('button', {
+              class: 'btn',
+              type: 'button',
+              html: `${svgIcon('upload', 14)}<span>${current.id ? '更换字体' : '选择字体'}</span>`,
+              onclick: () => picker.click(),
+            }),
+            current.id
+              ? h('button', {
+                  class: 'btn is-ghost',
+                  type: 'button',
+                  text: '恢复系统字体',
+                  onclick: async () => {
+                    const previous = config.customFont;
+                    config.customFont = { id: '', name: '' };
+                    await applyCustomFont(store.state);
+                    touchNow();
+                    if (!store.flushNow()) {
+                      config.customFont = previous;
+                      await applyCustomFont(store.state);
+                      touchNow();
+                      bus.emit('toast', { text: '恢复系统字体失败：本地存储写入异常', error: true });
+                      return;
+                    }
+                    if (previous.id) await files.remove(`font:${previous.id}`);
+                    selectSection('appearance');
+                  },
+                })
+              : null,
+            picker
+          )
+        );
+      })()
+    ),
+    group(
+      '主题预设',
+      (() => {
+        const themeInput = h('input', {
+          type: 'file',
+          accept: '.json,application/json',
+          style: { display: 'none' },
+          onchange: async (event) => {
+            const file = event.target.files?.[0];
+            event.target.value = '';
+            if (!file) return;
+            try {
+              await importTheme(file);
+              if (isOpen && activeTab === 'appearance') selectSection('appearance');
+              bus.emit('toast', { text: '主题已应用' });
+            } catch (err) {
+              bus.emit('toast', { text: err.message || '主题导入失败', error: true });
+            }
+          },
+        });
+        return row(
+          '分享外观',
+          '只导出风格、配色、圆角、滤镜与自定义 CSS，不含快捷方式和个人数据',
+          h(
+            'div',
+            { class: 'btn-row' },
+            h('button', {
+              class: 'btn',
+              type: 'button',
+              html: `${svgIcon('download', 14)}<span>导出主题</span>`,
+              onclick: () => {
+                exportTheme();
+                bus.emit('toast', { text: '主题已导出' });
+              },
+            }),
+            h('button', {
+              class: 'btn is-ghost',
+              type: 'button',
+              html: `${svgIcon('upload', 14)}<span>导入主题</span>`,
+              onclick: () => themeInput.click(),
+            }),
+            themeInput
+          )
+        );
+      })()
+    ),
+    group(
+      '自定义 CSS',
+      row(
+        '高级样式',
+        '立即生效并随配置一起备份。@import 会被移除；选择器写法可参考浏览器开发者工具。',
+        h(
+          'div',
+          { class: 'custom-css-editor' },
+          (() => {
+            const area = h('textarea', {
+              class: 'text-input custom-css-input',
+              maxlength: String(CUSTOM_CSS_MAX),
+              spellcheck: 'false',
+              placeholder: '/* 例如 */\n.clock-time { letter-spacing: 0.02em; }',
+              'aria-label': '自定义 CSS',
+              value: config.customCss || '',
+            });
+            area.value = config.customCss || '';
+            area.addEventListener('input', () => {
+              config.customCss = area.value;
+              applyCustomCss(area.value);
+              persist();
+              const count = area.closest('.custom-css-editor')?.querySelector('.custom-css-count');
+              if (count) count.textContent = `${area.value.length} / ${CUSTOM_CSS_MAX}`;
+            });
+            return area;
+          })(),
+          h(
+            'div',
+            { class: 'custom-css-foot' },
+            h('span', {
+              class: 'field-hint custom-css-count',
+              text: `${(config.customCss || '').length} / ${CUSTOM_CSS_MAX}`,
+            }),
+            h('button', {
+              class: 'btn is-ghost',
+              type: 'button',
+              text: '清空',
+              disabled: !config.customCss,
+              onclick: () => {
+                config.customCss = '';
+                applyCustomCss('');
+                touch();
+                selectSection('appearance');
+              },
+            })
+          )
+        ),
+        { stacked: true }
+      )
     )
   );
 }
@@ -500,6 +741,7 @@ function buildAppearance() {
 /* --------------------------------------------------------------- 壁纸 */
 
 function buildWallpaper() {
+  releaseWallpaperPoolUrls();
   const config = store.state.config;
   const bg = config.background;
 
@@ -660,86 +902,194 @@ function buildWallpaper() {
   }
 
   if (bg.type === 'file') {
+    const poolGrid = h('div', { class: 'wallpaper-pool', role: 'group', 'aria-label': '本地壁纸' });
+    const poolHint = h('div', { class: 'field-hint' });
+    const maxSize = 24 * 1024 * 1024;
+
+    const paintPool = () => {
+      clear(poolGrid);
+      releaseWallpaperPoolUrls();
+      const pool = Array.isArray(bg.pool) ? bg.pool : [];
+      poolHint.textContent = pool.length
+        ? `${pool.length} / ${WALLPAPER_POOL_LIMIT} 张 · 点击缩略图立即应用`
+        : '还没有本地壁纸；一次可以选择多张';
+      if (!pool.length) {
+        poolGrid.appendChild(
+          h('div', { class: 'wallpaper-pool-empty', text: '支持 JPG / PNG / WebP，单张不超过 24 MB' })
+        );
+        return;
+      }
+      for (const entry of pool) {
+        const thumb = h('button', {
+          class: 'pool-thumb',
+          type: 'button',
+          'aria-label': `应用壁纸 ${entry.name}`,
+          'aria-pressed': String(bg.fileId === entry.id),
+          title: entry.name,
+          onclick: () => {
+            bg.fileId = entry.id;
+            bg.rotatedAt = Date.now();
+            applyBackground(store.state);
+            touch();
+            paintPool();
+          },
+        });
+        const fallback = h('span', { class: 'pool-fallback', text: Array.from(entry.name || '图')[0] });
+        thumb.appendChild(fallback);
+        files
+          .get(`wallpaper:${entry.id}`)
+          .then((blob) => {
+            if (!blob || !thumb.isConnected) return;
+            const url = URL.createObjectURL(blob);
+            wallpaperPoolUrls.push(url);
+            const img = h('img', { src: url, alt: '', decoding: 'async' });
+            img.addEventListener('load', () => fallback.remove(), { once: true });
+            img.addEventListener('error', () => img.remove(), { once: true });
+            thumb.prepend(img);
+          })
+          .catch(() => {});
+
+        poolGrid.appendChild(
+          h(
+            'div',
+            { class: `pool-item${bg.fileId === entry.id ? ' is-active' : ''}` },
+            thumb,
+            h(
+              'div',
+              { class: 'pool-meta' },
+              h('span', { class: 'pool-name', text: entry.name, title: entry.name }),
+              h('button', {
+                class: 'pool-remove',
+                type: 'button',
+                text: '删除',
+                'aria-label': `删除壁纸 ${entry.name}`,
+                onclick: () => removeFromPool(entry),
+              })
+            )
+          )
+        );
+      }
+    };
+
+    const removeFromPool = async (entry, { refresh = true } = {}) => {
+      const snapshot = { pool: bg.pool.map((item) => ({ ...item })), fileId: bg.fileId, type: bg.type };
+      bg.pool = bg.pool.filter((item) => item.id !== entry.id);
+      if (bg.fileId === entry.id) bg.fileId = bg.pool[0]?.id || '';
+      if (!bg.pool.length) bg.type = 'gradient';
+      touchNow();
+      if (!store.flushNow()) {
+        Object.assign(bg, snapshot);
+        applyBackground(store.state);
+        touchNow();
+        bus.emit('toast', { text: '删除失败：本地存储写入异常', error: true });
+        return;
+      }
+      await dropLocalWallpaper(entry.id);
+      await applyBackground(store.state);
+      if (!bg.pool.length || refresh) {
+        selectSection('wallpaper');
+        return;
+      }
+      paintPool();
+    };
+
     const fileInput = h('input', {
       type: 'file',
       accept: 'image/*',
+      multiple: true,
       style: { display: 'none' },
       onchange: async (event) => {
-        const file = event.target.files?.[0];
-        if (!file) return;
-        if (!file.type.startsWith('image/')) {
-          bus.emit('toast', { text: '请选择图片文件', error: true });
-          event.target.value = '';
+        const chosen = Array.from(event.target.files || []);
+        event.target.value = '';
+        if (!chosen.length) return;
+        const room = WALLPAPER_POOL_LIMIT - bg.pool.length;
+        if (room <= 0) {
+          bus.emit('toast', { text: `最多保存 ${WALLPAPER_POOL_LIMIT} 张本地壁纸`, error: true });
           return;
         }
-        if (file.size > 24 * 1024 * 1024) {
-          bus.emit('toast', { text: '图片超过 24 MB，请压缩后再试', error: true });
-          event.target.value = '';
-          return;
+        const batch = chosen.slice(0, room);
+        if (chosen.length > room) {
+          bus.emit('toast', { text: `壁纸池已满，本次只添加前 ${room} 张`, error: true });
         }
         const seq = ++wallpaperUploadSeq;
-        const id = await saveLocalWallpaper(file).catch(() => '');
-        if (!id) {
-          if (seq === wallpaperUploadSeq) {
-            bus.emit('toast', { text: '壁纸保存失败，请检查浏览器存储空间', error: true });
-            event.target.value = '';
+        const snapshot = { pool: bg.pool.map((item) => ({ ...item })), fileId: bg.fileId, type: bg.type };
+        const added = [];
+        for (const file of batch) {
+          if (!file.type.startsWith('image/')) {
+            bus.emit('toast', { text: `已跳过非图片文件：${file.name}`, error: true });
+            continue;
           }
+          if (file.size > maxSize) {
+            bus.emit('toast', { text: `已跳过超过 24 MB 的文件：${file.name}`, error: true });
+            continue;
+          }
+          const id = await saveLocalWallpaper(file).catch(() => '');
+          if (!id) {
+            bus.emit('toast', { text: '壁纸保存失败，请检查浏览器存储空间', error: true });
+            break;
+          }
+          if (seq !== wallpaperUploadSeq || store.state.config.background !== bg) {
+            files.remove(`wallpaper:${id}`);
+            break;
+          }
+          added.push({ id, name: String(file.name || '本地壁纸').slice(0, 40), addedAt: Date.now() });
+        }
+        if (!added.length) return;
+        bg.pool = [...bg.pool, ...added];
+        if (!bg.fileId) bg.fileId = added[0].id;
+        bg.type = 'file';
+        await applyBackground(store.state);
+        touchNow();
+        if (!store.flushNow()) {
+          Object.assign(bg, snapshot);
+          await applyBackground(store.state);
+          touchNow();
+          for (const item of added) await files.remove(`wallpaper:${item.id}`);
+          bus.emit('toast', { text: '保存失败：本地存储写入异常', error: true });
           return;
         }
-        // 用户在上传途中又选了另一张：丢弃这次迟到的结果
-        if (seq !== wallpaperUploadSeq || store.state.config.background !== bg) {
-          const { files } = await import('./storage.js');
-          files.remove(`wallpaper:${id}`);
-          if (seq === wallpaperUploadSeq) event.target.value = '';
-          return;
-        }
-        const oldFileId = bg.fileId;
-        bg.fileId = id;
-        applyBackground(store.state);
-        touch();
-        // 先把新 fileId 同步落盘，确认成功后再删除旧文件；
-        // 否则崩溃/配额失败时会出现「状态指向旧文件，但旧文件已经被删掉」。
-        const persisted = store.flushNow();
-        if (!persisted) {
-          // 落盘失败：回退到旧壁纸并清掉刚落盘的新文件，
-          // 否则刷新后会回到旧状态，新文件还会变成无人引用的孤儿。
-          bg.fileId = oldFileId;
-          applyBackground(store.state);
-          const { files: assetFiles } = await import('./storage.js');
-          assetFiles.remove(`wallpaper:${id}`);
-          event.target.value = '';
-          return;
-        }
-        if (oldFileId && oldFileId !== id) {
-          const { files } = await import('./storage.js');
-          files.remove(`wallpaper:${oldFileId}`);
-        }
-        event.target.value = '';
         // 保存大图可能耗时，用户可能已经切到别的分区；不要强行把他拽回壁纸页
         if (isOpen && activeTab === 'wallpaper') {
           selectSection('wallpaper');
-          // 原来的上传按钮已被重建，键盘焦点先回到当前分区导航
           navEl.querySelector('.nav-item.is-active')?.focus({ preventScroll: true });
         }
-        bus.emit('toast', { text: '已应用本地壁纸' });
+        bus.emit('toast', { text: `已添加 ${added.length} 张本地壁纸` });
       },
     });
+
+    paintPool();
     sourceRows.push(
       row(
-        '本地上传',
-        bg.fileId ? '已保存到浏览器 IndexedDB，可离线使用' : '支持 JPG / PNG / WebP，建议不超过 24 MB',
+        '本地壁纸池',
+        poolHint,
         h(
           'div',
-          { style: { display: 'flex', alignItems: 'center' } },
+          { class: 'btn-row' },
           h('button', {
             class: 'btn',
             type: 'button',
-            html: `${svgIcon('upload', 14)}<span>${bg.fileId ? '更换图片' : '选择图片'}</span>`,
+            html: `${svgIcon('upload', 14)}<span>添加图片</span>`,
+            disabled: bg.pool.length >= WALLPAPER_POOL_LIMIT,
             onclick: () => fileInput.click(),
+          }),
+          h('button', {
+            class: 'btn is-ghost',
+            type: 'button',
+            text: '全部删除',
+            disabled: !bg.pool.length,
+            onclick: async () => {
+              const entries = [...bg.pool];
+              for (const entry of entries) await removeFromPool(entry, { refresh: false });
+              if (isOpen && activeTab === 'wallpaper') {
+                selectSection('wallpaper');
+                navEl.querySelector('.nav-item.is-active')?.focus({ preventScroll: true });
+              }
+            },
           }),
           fileInput
         )
-      )
+      ),
+      row('壁纸', '点击缩略图切换当前壁纸', h('div', {}, poolGrid), { stacked: true })
     );
   }
 
@@ -804,10 +1154,62 @@ function buildWallpaper() {
     veilReset.disabled = true;
   }
 
+  const rotationRows = [];
+  if (bg.type === 'file' || bg.type === 'bing' || bg.type === 'gradient') {
+    const poolSize = Array.isArray(bg.pool) ? bg.pool.length : 0;
+    const canRotate = bg.type === 'file' ? poolSize > 1 : true;
+    const rotationHint =
+      bg.type === 'file'
+        ? canRotate
+          ? `在 ${poolSize} 张本地壁纸间按顺序切换；新标签页模式每个新标签页换一张`
+          : '壁纸池里至少要有 2 张才能轮换'
+        : bg.type === 'bing'
+          ? '在必应最近 8 天里切换；新标签页模式每个新标签页换一张'
+          : '在全部渐变预设间循环';
+    rotationRows.push(
+      row(
+        '轮换时机',
+        rotationHint,
+        makeSegmented(
+          [
+            { value: 'off', label: '关闭' },
+            { value: 'newtab', label: '每个新标签页' },
+            { value: 'hour', label: '每小时' },
+            { value: 'day', label: '每天' },
+          ],
+          bg.rotation || 'off',
+          (value) => {
+            bg.rotation = value;
+            bg.rotatedAt = 0;
+            touch();
+          }
+        )
+      ),
+      row(
+        '立即更换',
+        canRotate ? '从当前来源里换到下一张，并重置轮换计时' : '先往壁纸池里再加一张',
+        h('button', {
+          class: 'btn',
+          type: 'button',
+          text: '换一张',
+          disabled: !canRotate,
+          onclick: async () => {
+            if (!rotateWallpaperNow(store.state)) return;
+            await applyBackground(store.state);
+            touch();
+            selectSection('wallpaper');
+            navEl.querySelector('.nav-item.is-active')?.focus({ preventScroll: true });
+          },
+        })
+      )
+    );
+  }
+
   return h(
     'div',
     {},
     group('来源', row('壁纸类型', '切换后立即应用', typeControl), ...sourceRows),
+    rotationRows.length ? group('轮换', ...rotationRows) : null,
     bg.type === 'gradient' ? group('渐变预设', gallery) : null,
     group(
       '调整',
@@ -1379,6 +1781,9 @@ function buildWidgets() {
     ['notes', '便签', '随手记，自动保存'],
     ['bookmarks', '书签', '需要单独授权读取浏览器书签'],
     ['topSites', '常去网站', '需要授权读取浏览记录中的高频站点'],
+    ['pomodoro', '专注计时', '25 分钟专注 + 5 分钟休息，状态跨标签页同步'],
+    ['worldClock', '世界时钟', '最多 6 个城市，点击卡片右上角选择'],
+    ['countdown', '倒计时', '为截止日期保留一个醒目的位置'],
   ];
 
   return group(
@@ -1397,6 +1802,171 @@ function buildWidgets() {
 }
 
 /* --------------------------------------------------------------- 搜索 */
+
+function engineEditor(engine = null) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+
+    const nameInput = h('input', {
+      class: 'text-input',
+      type: 'text',
+      value: engine?.name || '',
+      placeholder: '例如：Perplexity',
+      maxlength: String(CUSTOM_ENGINE_NAME_MAX),
+      'aria-label': '引擎名称',
+      autocomplete: 'off',
+    });
+    const urlInput = h('input', {
+      class: 'text-input',
+      type: 'text',
+      value: engine?.url || '',
+      placeholder: 'https://www.perplexity.ai/search?q=%s',
+      maxlength: '500',
+      spellcheck: 'false',
+      'aria-label': '搜索地址模板',
+      autocomplete: 'off',
+    });
+    const error = h('div', { class: 'field-error', role: 'alert', hidden: true });
+    const showError = (text) => {
+      error.textContent = text;
+      error.hidden = false;
+    };
+
+    const body = h(
+      'div',
+      {},
+      h('div', { class: 'field' }, h('label', { text: '名称' }), nameInput),
+      h(
+        'div',
+        { class: 'field' },
+        h('label', { text: '搜索地址模板' }),
+        urlInput,
+        h(
+          'div',
+          { class: 'field-hint' },
+          '用 ',
+          h('code', { text: '%s' }),
+          ' 代表搜索词，例如 ',
+          h('code', { text: 'https://www.google.com/search?q=%s' })
+        )
+      ),
+      error
+    );
+
+    let modal = null;
+    const submit = () => {
+      const name = nameInput.value.trim();
+      const url = urlInput.value.trim();
+      if (!name) {
+        showError('请填写名称');
+        nameInput.focus();
+        return;
+      }
+      if (!url.includes('%s')) {
+        showError('搜索地址必须包含 %s 占位符');
+        urlInput.focus();
+        return;
+      }
+      const next = sanitizeCustomEngine({ id: engine?.id, name, url });
+      if (!next) {
+        showError('只支持 http(s) 完整地址，且必须能被浏览器打开');
+        urlInput.focus();
+        return;
+      }
+      finish(next);
+      modal?.close();
+    };
+    const onKeydown = (event) => {
+      if (event.isComposing || event.keyCode === 229) return;
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        submit();
+      }
+    };
+    nameInput.addEventListener('keydown', onKeydown);
+    urlInput.addEventListener('keydown', onKeydown);
+
+    modal = openModal({
+      title: engine ? '编辑搜索引擎' : '添加搜索引擎',
+      body,
+      footer: [
+        h('button', {
+          class: 'btn',
+          type: 'button',
+          text: '取消',
+          onclick: () => {
+            finish(null);
+            modal.close();
+          },
+        }),
+        h('button', { class: 'btn is-primary', type: 'button', text: engine ? '保存' : '添加', onclick: submit }),
+      ],
+      onClose: () => finish(null),
+    });
+
+    setTimeout(() => {
+      if (!nameInput.isConnected) return;
+      nameInput.focus({ preventScroll: true });
+      if (engine) nameInput.select();
+    }, 60);
+  });
+}
+
+function permissionRow(kind, name, hint) {
+  const status = h('span', { class: 'field-hint', text: '检测中…' });
+  const actions = h('div', { class: 'btn-row' });
+  const box = h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px' } }, status, actions);
+
+  permissionGranted(kind).then((granted) => {
+    if (!box.isConnected) return;
+    clear(actions);
+    if (!hasPermissionApi()) {
+      status.textContent = '安装扩展后可用';
+      return;
+    }
+    if (granted) {
+      status.textContent = '已授权';
+      actions.appendChild(
+        h('button', {
+          class: 'btn is-ghost',
+          type: 'button',
+          text: '撤销',
+          'aria-label': `撤销${name}权限`,
+          onclick: async () => {
+            await revokePermission(kind);
+            selectSection('search');
+          },
+        })
+      );
+    } else {
+      status.textContent = '未授权';
+      actions.appendChild(
+        h('button', {
+          class: 'btn',
+          type: 'button',
+          text: '授权',
+          'aria-label': `授权${name}`,
+          onclick: async () => {
+            // 直接调用 request，保留点击手势；授权后重建当前分区刷新状态
+            const ok = await requestOptionalPermission(kind);
+            bus.emit('toast', {
+              text: ok ? `已启用${name}搜索` : '未获得权限',
+              error: !ok,
+            });
+            selectSection('search');
+          },
+        })
+      );
+    }
+  });
+
+  return row(name, hint, box);
+}
 
 function buildSearch() {
   const search = store.state.config.search;
@@ -1417,6 +1987,7 @@ function buildSearch() {
     },
   });
 
+  const allEngines = enginesFor(store.state.config);
   const engineGrid = h(
     'div',
     {
@@ -1425,12 +1996,13 @@ function buildSearch() {
       'aria-label': '默认搜索引擎',
       style: { gridTemplateColumns: 'repeat(auto-fill, minmax(112px, 1fr))' },
     },
-    ...ENGINES.map((engine) =>
+    ...allEngines.map((engine) =>
       h(
         'button',
         {
           class: `btn${search.engine === engine.id ? ' is-primary' : ''}`,
           type: 'button',
+          'data-engine-id': engine.id,
           'aria-pressed': String(search.engine === engine.id),
           style: { justifyContent: 'flex-start', height: '38px' },
           onclick: () => {
@@ -1450,10 +2022,124 @@ function buildSearch() {
     )
   );
 
+  const customList = Array.isArray(search.engines) ? search.engines : [];
+  const saveEngines = (next) => {
+    search.engines = next;
+    touch();
+    selectSection('search');
+  };
+  const editEngine = async (engine) => {
+    const draft = await engineEditor(engine);
+    if (!draft) return;
+    const duplicate = customList.some(
+      (item) => item.id !== engine.id && item.url.toLowerCase() === draft.url.toLowerCase()
+    );
+    if (duplicate) {
+      bus.emit('toast', { text: '这个搜索地址已经添加过了', error: true });
+      return;
+    }
+    saveEngines(customList.map((item) => (item.id === engine.id ? { ...item, ...draft, id: item.id } : item)));
+  };
+  const addEngine = async () => {
+    if (customList.length >= CUSTOM_ENGINE_LIMIT) {
+      bus.emit('toast', { text: `最多添加 ${CUSTOM_ENGINE_LIMIT} 个自定义引擎`, error: true });
+      return;
+    }
+    const draft = await engineEditor();
+    if (!draft) return;
+    if (customList.some((item) => item.url.toLowerCase() === draft.url.toLowerCase())) {
+      bus.emit('toast', { text: '这个搜索地址已经添加过了', error: true });
+      return;
+    }
+    saveEngines([...customList, draft]);
+  };
+  const removeEngine = async (engine) => {
+    const ok = await confirmDialog({
+      title: '删除搜索引擎',
+      message: `确定删除「${engine.name}」吗？如果它是当前默认引擎，会切回百度。`,
+      confirmText: '删除',
+      danger: true,
+    });
+    if (!ok) return;
+    if (search.engine === engine.id) search.engine = 'baidu';
+    saveEngines(customList.filter((item) => item.id !== engine.id));
+  };
+
+  const customRows = customList.map((engine) =>
+    row(
+      engine.name,
+      prettyHost(engine.url),
+      h(
+        'div',
+        { class: 'btn-row' },
+        h('button', {
+          class: 'btn is-ghost',
+          type: 'button',
+          text: '编辑',
+          'aria-label': `编辑 ${engine.name}`,
+          onclick: () => editEngine(engine),
+        }),
+        h('button', {
+          class: 'btn is-ghost',
+          type: 'button',
+          text: '删除',
+          'aria-label': `删除 ${engine.name}`,
+          onclick: () => removeEngine(engine),
+        })
+      )
+    )
+  );
+  if (!customRows.length) {
+    customRows.push(row('还没有自定义引擎', '可以接入公司内网搜索、垂直站点或自建搜索服务', null));
+  }
+  customRows.push(
+    row(
+      '添加搜索引擎',
+      `${customList.length} / ${CUSTOM_ENGINE_LIMIT}；只影响本页搜索，不会改动浏览器默认引擎`,
+      h('button', {
+        class: 'btn is-primary',
+        type: 'button',
+        text: '添加引擎',
+        disabled: customList.length >= CUSTOM_ENGINE_LIMIT,
+        onclick: addEngine,
+      })
+    )
+  );
+
   return h(
     'div',
     {},
     group('默认引擎', engineGrid),
+    group('自定义引擎', ...customRows),
+    group(
+      '命令面板',
+      permissionRow(
+        'tabs',
+        '搜索打开的标签页',
+        '在搜索框输入「tab 关键词」；需要 tabs 权限，可随时撤销'
+      ),
+      permissionRow(
+        'bookmarks',
+        '搜索书签',
+        '在搜索框输入「bookmark 关键词」；与书签小组件共用同一个可选权限'
+      ),
+      permissionRow(
+        'history',
+        '搜索浏览历史',
+        '在搜索框输入「history 关键词」；历史只在本机读取，不会上传'
+      ),
+      h(
+        'div',
+        { class: 'info-block' },
+        '命令面板还支持 ',
+        h('code', { text: 'todo 买牛奶' }),
+        '、',
+        h('code', { text: 'note 记一句' }),
+        '、',
+        h('code', { text: 'copy 一段文字' }),
+        '，回车立即执行。'
+      )
+    ),
     group(
       '联想与跳转',
       row(
@@ -1544,7 +2230,7 @@ function buildData() {
       '备份',
       row(
         '导出配置',
-        '生成 zip 备份：配置、快捷方式、待办、最近搜索，以及上传的壁纸和图标',
+        '生成 zip 备份：配置、快捷方式、待办、最近搜索，以及上传的壁纸、图标和字体',
         h('button', {
           class: 'btn',
           type: 'button',
@@ -1625,8 +2311,10 @@ const PERMISSIONS = [
   ['storage', '保存配置到本机'],
   ['unlimitedStorage', '保存较大尺寸的本地壁纸'],
   ['favicon', '读取站点图标的本地缓存（不联网、不上传）'],
-  ['bookmarks（可选）', '导入书签、显示书签组件'],
+  ['bookmarks（可选）', '导入书签、显示书签组件、命令面板搜索书签'],
   ['topSites（可选）', '显示「常去网站」组件'],
+  ['tabs（可选）', '命令面板搜索已打开的标签页（只读标题与地址）'],
+  ['history（可选）', '命令面板搜索浏览历史（只读本机记录）'],
 ];
 
 const NETWORK = [

@@ -328,7 +328,9 @@ const PATHS = {
   dots: '<circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/>',
   arrowLeft: '<path d="M20 12H4.5"/><path d="m10.5 5.5-6.5 6.5 6.5 6.5"/>',
   history: '<path d="M3.6 12a8.4 8.4 0 1 0 2.5-6"/><path d="M3.5 4.3v5.2h5.2"/><path d="M12 8.2v4.3l2.9 1.7"/>',
+  copy: '<rect x="8.5" y="8.5" width="11" height="11" rx="2.4"/><path d="M15.5 8.5v-2A2.5 2.5 0 0 0 13 4H6.5A2.5 2.5 0 0 0 4 6.5V13a2.5 2.5 0 0 0 2.5 2.5h2"/>',
   sparkle: '<path d="M12 3.5l1.7 4.6 4.6 1.7-4.6 1.7L12 16.1l-1.7-4.6L5.7 9.8l4.6-1.7Z"/><path d="M18.4 15.4l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8Z"/>',
+  timer: '<circle cx="12" cy="13.2" r="7.8"/><path d="M12 9.2v4l2.6 1.6"/><path d="M9 2.5h6M12 2.5v2.7"/>',
 };
 
 export function svgIcon(name, size = 20, extraClass = '') {

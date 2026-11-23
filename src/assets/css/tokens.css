@@ -21,9 +21,10 @@ body {
 }
 
 html {
-  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI Variable Display', 'Segoe UI',
+  --font-sans-base: -apple-system, BlinkMacSystemFont, 'Segoe UI Variable Display', 'Segoe UI',
     'PingFang SC', 'HarmonyOS Sans SC', 'MiSans', 'Hiragino Sans GB', 'Microsoft YaHei UI',
     'Microsoft YaHei', 'Source Han Sans SC', 'Noto Sans CJK SC', system-ui, sans-serif;
+  --font-sans: var(--font-sans-base);
   --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', 'Cascadia Mono', Consolas, monospace;
 
   /* --- 用户可调 --- */

@@ -6,10 +6,23 @@
  */
 
 import { $, h, clear, svgIcon, debounce, normalizeUrl, isSafeUrl, bus, hostOf } from './util.js';
-import { ENGINES, engineById, RECENT_SEARCH_LIMIT, RECENT_SEARCH_MAX_LENGTH } from './defaults.js';
+import {
+  enginesFor,
+  engineById,
+  RECENT_SEARCH_LIMIT,
+  RECENT_SEARCH_MAX_LENGTH,
+} from './defaults.js';
 import * as store from './store.js';
 import { openMenu, closeMenu, isMenuOpen } from './menu.js';
 import { resolveIcon, brandSlugFor, brandLogoUrl, previewFileIcon, isFaviconPlaceholder } from './icons.js';
+import {
+  addTodo,
+  appendNote,
+  copyText,
+  quickSource,
+  requestPermission,
+  hasPermissionApi,
+} from './quick.js';
 
 let els = null;
 let rows = [];
@@ -33,6 +46,42 @@ const SUGGEST_TIMEOUT = 4000;
 
 /** 搜索结果里的「命令」组：把手边常用的动作直接变成一句话 */
 const COMMANDS = [
+  {
+    label: '快速添加待办',
+    keywords: 'todo task 待办 任务 添加',
+    icon: 'check',
+    run: () => startQuickCommand('todo '),
+  },
+  {
+    label: '快速写便签',
+    keywords: 'note notes 便签 笔记 记录',
+    icon: 'note',
+    run: () => startQuickCommand('note '),
+  },
+  {
+    label: '复制一段文本',
+    keywords: 'copy clipboard 复制 剪贴板',
+    icon: 'copy',
+    run: () => startQuickCommand('copy '),
+  },
+  {
+    label: '搜索打开的标签页',
+    keywords: 'tab tabs 标签页 窗口 切换',
+    icon: 'grid',
+    run: () => startQuickCommand('tab ', 'tabs'),
+  },
+  {
+    label: '搜索书签',
+    keywords: 'bookmark bookmarks 书签 收藏',
+    icon: 'folder',
+    run: () => startQuickCommand('bookmark ', 'bookmarks'),
+  },
+  {
+    label: '搜索浏览历史',
+    keywords: 'history 历史 访问记录',
+    icon: 'history',
+    run: () => startQuickCommand('history ', 'history'),
+  },
   {
     label: '添加快捷方式',
     keywords: 'add shortcut 添加 新建 图标',
@@ -88,6 +137,121 @@ function matchCommands(query) {
   return COMMANDS.filter(
     (command) => command.label.toLowerCase().includes(lower) || command.keywords.includes(lower)
   ).slice(0, 3);
+}
+
+/* ------------------------------------------------------- 带参数的命令 */
+
+const QUICK_PATTERNS = [
+  { kind: 'todo', pattern: /^(?:todo|待办)\s+([\s\S]+)$/i, icon: 'check', title: '待办' },
+  { kind: 'note', pattern: /^(?:note|便签)\s+([\s\S]+)$/i, icon: 'note', title: '便签' },
+  { kind: 'copy', pattern: /^(?:copy|复制)\s+([\s\S]+)$/i, icon: 'copy', title: '复制' },
+  { kind: 'tabs', pattern: /^(?:tab|标签页)\s+([\s\S]+)$/i, icon: 'grid', title: '打开的标签页' },
+  { kind: 'bookmarks', pattern: /^(?:bookmark|bm|书签)\s+([\s\S]+)$/i, icon: 'folder', title: '书签' },
+  { kind: 'history', pattern: /^(?:history|历史)\s+([\s\S]+)$/i, icon: 'history', title: '浏览历史' },
+];
+
+function parseQuickQuery(query) {
+  for (const entry of QUICK_PATTERNS) {
+    const match = entry.pattern.exec(query);
+    if (!match) continue;
+    const arg = match[1].trim();
+    if (!arg) continue;
+    return { ...entry, arg, key: `${entry.kind}:${arg.toLowerCase()}` };
+  }
+  return null;
+}
+
+let quickState = { key: '', kind: '', status: 'idle', items: [] };
+let quickSeq = 0;
+
+function syncQuickState(spec) {
+  if (!spec || !['tabs', 'bookmarks', 'history'].includes(spec.kind)) {
+    if (quickState.key) {
+      quickSeq += 1;
+      quickState = { key: '', kind: '', status: 'idle', items: [] };
+    }
+    return;
+  }
+  if (quickState.key === spec.key) return;
+  quickSeq += 1;
+  const seq = quickSeq;
+  quickState = { key: spec.key, kind: spec.kind, status: 'loading', items: [] };
+  const source = quickSource(spec.kind);
+  if (!source) return;
+  source
+    .load(spec.arg)
+    .then((result) => {
+      if (seq !== quickSeq) return;
+      quickState = {
+        key: spec.key,
+        kind: spec.kind,
+        status: result.status || 'error',
+        items: Array.isArray(result.items) ? result.items : [],
+      };
+      if (latestQuery && parseQuickQuery(els.input.value.trim())?.key === spec.key) {
+        renderSuggestions([], { keepActive: true });
+      }
+    })
+    .catch(() => {
+      if (seq !== quickSeq) return;
+      quickState = { key: spec.key, kind: spec.kind, status: 'error', items: [] };
+      renderSuggestions([], { keepActive: true });
+    });
+}
+
+function focusQuickCommand(prefix) {
+  els.input.value = prefix;
+  latestQuery = prefix.trim();
+  activeIndex = -1;
+  els.input.focus({ preventScroll: true });
+  els.input.dispatchEvent(new Event('input'));
+}
+
+async function startQuickCommand(prefix, permissionKind = '') {
+  if (!permissionKind) {
+    focusQuickCommand(prefix);
+    return;
+  }
+  if (!hasPermissionApi()) {
+    bus.emit('toast', { text: '标签页 / 书签 / 历史搜索只在安装扩展后可用', error: true });
+    return;
+  }
+  const granted = await requestPermission(permissionKind);
+  if (!granted) {
+    bus.emit('toast', { text: '未获得权限，命令面板保持精简', error: true });
+    return;
+  }
+  focusQuickCommand(prefix);
+}
+
+function runQuickAction(spec) {
+  if (spec.kind === 'todo') {
+    addTodo(spec.arg);
+    bus.emit('toast', { text: `已添加待办：${spec.arg.slice(0, 30)}` });
+    return;
+  }
+  if (spec.kind === 'note') {
+    const ok = appendNote(spec.arg);
+    bus.emit('toast', { text: ok ? '已追加到便签' : '便签内容为空', error: !ok });
+    return;
+  }
+  if (spec.kind === 'copy') {
+    copyText(spec.arg).then((ok) => {
+      bus.emit('toast', { text: ok ? '已复制到剪贴板' : '复制失败，请检查剪贴板权限', error: !ok });
+    });
+  }
+}
+
+function appendPaletteStatus(text, { loading = false, action = null } = {}) {
+  els.suggest.appendChild(
+    h(
+      'div',
+      { class: 'suggest-status', role: 'status' },
+      h('span', { class: 'suggest-icon', html: svgIcon(loading ? 'refresh' : 'info', 15, loading ? 'is-spinning' : '') }),
+      h('span', { class: 'suggest-status-text', text }),
+      action
+    )
+  );
 }
 
 /* --------------------------------------------------------------- 判定 */
@@ -212,7 +376,7 @@ export function initSearch() {
     closeSuggest();
     const rect = els.engineBtn.getBoundingClientRect();
     openMenu(
-      ENGINES.map((engine) => ({
+      enginesFor(store.state.config).map((engine) => ({
         label: engine.name,
         icon: store.state.config.search.engine === engine.id ? 'check' : undefined,
         onClick: () => {
@@ -277,7 +441,7 @@ function revealPanel() {
 
 function paintEngine() {
   if (!els) return;
-  const engine = engineById(store.state.config.search.engine);
+  const engine = engineById(store.state.config.search.engine, store.state.config);
   if (paintedEngineId === engine.id && els.engineBtn.childElementCount) return;
   paintedEngineId = engine.id;
   clear(els.engineBtn);
@@ -335,7 +499,7 @@ function paintHint() {
 /* --------------------------------------------------------------- 输入 */
 
 const requestSuggest = debounce(async (query) => {
-  const engine = engineById(store.state.config.search.engine);
+  const engine = engineById(store.state.config.search.engine, store.state.config);
   // 失焦/关闭后不要再发请求；本地结果在 onInput 里已经画过，不必重绘
   if (
     !query ||
@@ -383,6 +547,7 @@ function onInput() {
   latestQuery = query;
   activeIndex = -1;
   suggestError = false;
+  syncQuickState(parseQuickQuery(query));
   syncInputState();
 
   if (!query) {
@@ -540,7 +705,7 @@ function navigate(url) {
 }
 
 function searchWith(query) {
-  const engine = engineById(store.state.config.search.engine);
+  const engine = engineById(store.state.config.search.engine, store.state.config);
   rememberQuery(query);
   navigate(engine.url.replace('%s', encodeURIComponent(query)));
 }
@@ -859,7 +1024,7 @@ function renderSuggestions(remote = [], { keepActive = false, idle = false } = {
     els.input.removeAttribute('aria-activedescendant');
   }
 
-  const engine = engineById(store.state.config.search.engine);
+  const engine = engineById(store.state.config.search.engine, store.state.config);
   const historyOn = store.state.config.search.history !== false;
 
   // 输入框为空且聚焦：只展示最近搜索
@@ -890,6 +1055,7 @@ function renderSuggestions(remote = [], { keepActive = false, idle = false } = {
 
   const lower = query.toLowerCase();
   const isUrl = looksLikeUrl(query);
+  const quick = isUrl ? null : parseQuickQuery(query);
   // 远程联想常会把本地已经出现的条目再吐一遍，记下已出现的文字用于去重
   const claimed = new Set();
 
@@ -926,6 +1092,64 @@ function renderSuggestions(remote = [], { keepActive = false, idle = false } = {
       },
     }))
   );
+
+  // 2.5) 带参数的命令：todo / note / copy 直接执行
+  if (quick && ['todo', 'note', 'copy'].includes(quick.kind)) {
+    const label =
+      quick.kind === 'todo'
+        ? `添加待办「${quick.arg}」`
+        : quick.kind === 'note'
+          ? `追加到便签「${quick.arg}」`
+          : `复制「${quick.arg}」`;
+    appendGroup('快捷动作', [
+      {
+        icon: quick.icon,
+        text: label,
+        query,
+        hint: 'Enter',
+        primary: true,
+        kind: 'quick',
+        run: () => runQuickAction(quick),
+      },
+    ]);
+  }
+
+  // 2.6) 标签页 / 书签 / 历史：异步取数据，没授权时给出明确入口
+  if (quick && ['tabs', 'bookmarks', 'history'].includes(quick.kind)) {
+    const source = quickSource(quick.kind);
+    if (!hasPermissionApi()) {
+      appendPaletteStatus(`${quick.title}搜索只在安装扩展后可用`);
+    } else if (quickState.key !== quick.key || quickState.status === 'loading') {
+      appendPaletteStatus(`正在搜索${quick.title}…`, { loading: true });
+    } else if (quickState.status === 'denied') {
+      appendGroup(quick.title, [
+        {
+          icon: 'lock',
+          text: `启用${quick.title}搜索`,
+          hint: '需要授权',
+          run: () => startQuickCommand(`${quick.kind === 'tabs' ? 'tab' : quick.kind === 'bookmarks' ? 'bookmark' : 'history'} `, quick.kind),
+        },
+      ]);
+    } else if (quickState.status === 'unavailable') {
+      appendPaletteStatus(`${quick.title}搜索只在安装扩展后可用`);
+    } else if (quickState.status === 'error') {
+      appendPaletteStatus(`${quick.title}读取失败，可直接搜索`);
+    } else if (!quickState.items.length) {
+      appendPaletteStatus(`没有找到匹配的${quick.title}`);
+    } else {
+      appendGroup(
+        quick.title,
+        quickState.items.map((item) => ({
+          icon: quick.kind === 'bookmarks' ? 'folder' : quick.kind === 'history' ? 'history' : 'external',
+          text: item.title,
+          hint: item.url.replace(/^https?:\/\//, '').slice(0, 48),
+          query,
+          run: () => navigate(item.url),
+        }))
+      );
+    }
+    if (source) claimed.add(quick.title.toLowerCase());
+  }
 
   // 3) 本地快捷方式（包含文件夹里的条目）
   if (!isUrl) {
@@ -1036,7 +1260,12 @@ function renderSuggestions(remote = [], { keepActive = false, idle = false } = {
   }
 
   openPanel();
-  if (previousActive >= 0) {
+  // 带参数命令只有一行有意义：让它默认选中，用户敲完直接回车即可执行
+  const quickIndex = quick && ['todo', 'note', 'copy'].includes(quick.kind) ? rows.findIndex((row) => row.kind === 'quick') : -1;
+  if (quickIndex >= 0) {
+    activeIndex = quickIndex;
+    paintActive();
+  } else if (previousActive >= 0) {
     activeIndex = Math.min(previousActive, rows.length - 1);
     paintActive();
   }

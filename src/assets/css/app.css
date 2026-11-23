@@ -802,6 +802,16 @@ html[data-tone='light'] .clock {
   white-space: nowrap;
 }
 
+.is-spinning {
+  animation: suggest-spin 0.9s linear infinite;
+}
+
+@keyframes suggest-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @keyframes suggest-shimmer {
   from {
     background-position: 120% 0;
@@ -1693,6 +1703,136 @@ html[data-style='terminal'] .grid > .tile.drop-after::before {
   font-size: 12px;
   color: var(--fg-3);
   line-height: 1.6;
+}
+
+/* --------------------------------------------------------------- 专注 */
+
+.pomo-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pomo-phase {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+
+.pomo-time {
+  font-size: 32px;
+  font-weight: 650;
+  line-height: 1.1;
+  letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+.is-pomodoro.is-break .pomo-time {
+  color: #7ee787;
+}
+
+.pomo-bar {
+  height: 4px;
+  margin: 2px 0 4px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--fg-3) 18%, transparent);
+}
+
+.pomo-bar i {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 0.45s linear;
+}
+
+.pomo-toggle {
+  width: 100%;
+  height: 34px;
+}
+
+/* ----------------------------------------------------------- 世界时钟 */
+
+.worldclock-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.worldclock-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 0;
+}
+
+.worldclock-row + .worldclock-row {
+  border-top: 1px solid var(--divider);
+}
+
+.worldclock-name {
+  font-size: 12.5px;
+  color: var(--fg-2);
+}
+
+.worldclock-day {
+  font-size: 10px;
+  color: var(--fg-3);
+}
+
+.worldclock-time {
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --------------------------------------------------------------- 倒计时 */
+
+.countdown-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg-2);
+}
+
+.countdown-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin: 8px 0 4px;
+}
+
+.countdown-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 6px 2px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--fg-3) 9%, transparent);
+}
+
+.countdown-value {
+  font-size: 19px;
+  font-weight: 650;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.countdown-unit {
+  font-size: 9.5px;
+  color: var(--fg-3);
+}
+
+.countdown.is-done .countdown-done {
+  padding: 8px 0;
+  font-size: 15px;
+  font-weight: 650;
+  color: #ff8a94;
 }
 
 /* ------------------------------------------------------------------ 便签 */

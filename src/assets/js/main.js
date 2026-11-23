@@ -13,6 +13,7 @@ import { initSearch } from './search.js';
 import { initTiles } from './tiles.js';
 import { initWidgets } from './widgets.js';
 import { requestPersistentStorage } from './storage.js';
+import { applyCustomFont } from './custom-font.js';
 
 /* --------------------------------------------------------------- 提示条 */
 
@@ -100,7 +101,14 @@ function renderTopbar() {
   const config = store.state.config;
   const widgets = config.widgets;
   const hasWidgets = Boolean(
-    config.layout.showWeather || widgets.todo || widgets.notes || widgets.bookmarks || widgets.topSites
+    config.layout.showWeather ||
+      widgets.todo ||
+      widgets.notes ||
+      widgets.bookmarks ||
+      widgets.topSites ||
+      widgets.pomodoro ||
+      widgets.worldClock ||
+      widgets.countdown
   );
   const right = $('#topbar-right');
   if (!right) return;
@@ -168,6 +176,7 @@ function renderTopbar() {
 
 function boot() {
   applyConfig(store.state);
+  applyCustomFont(store.state);
   initBackground(store);
 
   initClock(store);
@@ -192,6 +201,7 @@ function boot() {
     }
     if (scope === 'config' || scope === 'all') {
       applyConfig(store.state);
+      applyCustomFont(store.state);
       // 风格变化会改变遮罩强度与滤镜：无论从设置页、导入还是其它入口改 config，都同步一次
       applyBackgroundLook(store.state);
       renderTopbar();
