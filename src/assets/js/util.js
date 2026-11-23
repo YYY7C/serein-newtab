@@ -325,6 +325,7 @@ const PATHS = {
   sidebar: '<rect x="3.5" y="4.5" width="17" height="15" rx="3"/><path d="M15 4.5v15"/>',
   dots: '<circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/>',
   arrowLeft: '<path d="M20 12H4.5"/><path d="m10.5 5.5-6.5 6.5 6.5 6.5"/>',
+  history: '<path d="M3.6 12a8.4 8.4 0 1 0 2.5-6"/><path d="M3.5 4.3v5.2h5.2"/><path d="M12 8.2v4.3l2.9 1.7"/>',
   sparkle: '<path d="M12 3.5l1.7 4.6 4.6 1.7-4.6 1.7L12 16.1l-1.7-4.6L5.7 9.8l4.6-1.7Z"/><path d="M18.4 15.4l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8Z"/>',
 };
 

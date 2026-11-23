@@ -7,7 +7,7 @@ import { uid, normalizeUrl, isUsableUrl, isSafeImageUrl } from './util.js';
 export const APP = {
   name: 'Serein',
   subtitle: '新标签页',
-  version: '1.2.0',
+  version: '1.3.0',
   schema: 1,
 };
 
@@ -203,13 +203,17 @@ export const ENGINES = [
   { id: 'google', name: 'Google', url: 'https://www.google.com/search?q=%s', color: '#4285F4', letter: 'G', suggest: 'google' },
   { id: 'so360', name: '360 搜索', url: 'https://www.so.com/s?q=%s', color: '#19B955', letter: '360', suggest: '360' },
   { id: 'sogou', name: '搜狗', url: 'https://www.sogou.com/web?query=%s', color: '#FB6022', letter: '搜', suggest: null },
-  { id: 'ddg', name: 'DuckDuckGo', url: 'https://duckduckgo.com/?q=%s', color: '#DE5833', letter: 'D', suggest: null },
+  { id: 'ddg', name: 'DuckDuckGo', url: 'https://duckduckgo.com/?q=%s', color: '#DE5833', letter: 'D', suggest: 'duckduckgo' },
   { id: 'zhihu', name: '知乎', url: 'https://www.zhihu.com/search?type=content&q=%s', color: '#0084FF', letter: '知', suggest: null },
-  { id: 'bilibili', name: '哔哩哔哩', url: 'https://search.bilibili.com/all?keyword=%s', color: '#FB7299', letter: '哔', suggest: null },
+  { id: 'bilibili', name: '哔哩哔哩', url: 'https://search.bilibili.com/all?keyword=%s', color: '#FB7299', letter: '哔', suggest: 'bilibili' },
   { id: 'github', name: 'GitHub', url: 'https://github.com/search?q=%s', color: '#24292F', letter: 'G', suggest: null },
 ];
 
 export const engineById = (id) => ENGINES.find((e) => e.id === id) || ENGINES[0];
+
+/** 最近搜索最多留几条、单条最长多少字符（联想面板与配置迁移共用） */
+export const RECENT_SEARCH_LIMIT = 8;
+export const RECENT_SEARCH_MAX_LENGTH = 100;
 
 /* ------------------------------------------------------------- 默认快捷方式 */
 
@@ -320,6 +324,9 @@ export function createDefaultState() {
         engine: 'baidu',
         suggestions: true,
         openInNewTab: false,
+        // 最近搜索只存在本机；关掉开关后不再记录，已有记录可在设置里清除
+        history: true,
+        recent: [],
       },
 
       behavior: {
@@ -573,6 +580,23 @@ export function migrate(raw) {
   if (!ENGINES.some((engine) => engine.id === merged.config.search.engine)) {
     merged.config.search.engine = defaults.config.search.engine;
   }
+  {
+    // 最近搜索来自本机输入，导入的备份可能带脏数据：只保留「去空白、限长、去重」后的条目
+    const rawRecent = Array.isArray(raw.config?.search?.recent) ? raw.config.search.recent : [];
+    const seen = new Set();
+    const recent = [];
+    for (const item of rawRecent) {
+      if (typeof item !== 'string') continue;
+      const text = item.trim().slice(0, RECENT_SEARCH_MAX_LENGTH);
+      if (!text) continue;
+      const key = text.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      recent.push(text);
+      if (recent.length >= RECENT_SEARCH_LIMIT) break;
+    }
+    merged.config.search.recent = recent;
+  }
   if (typeof merged.config.accent !== 'string' || !/^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(merged.config.accent)) {
     merged.config.accent = defaults.config.accent;
   }
@@ -638,6 +662,7 @@ export function migrate(raw) {
     ['config.layout', 'verticalCenter'],
     ['config.search', 'suggestions'],
     ['config.search', 'openInNewTab'],
+    ['config.search', 'history'],
     ['config.behavior', 'shortcutsInNewTab'],
     ['config.behavior', 'confirmDelete'],
     ['config.widgets', 'todo'],

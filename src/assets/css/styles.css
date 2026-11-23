@@ -95,8 +95,17 @@ html[data-style='noir'] .search.is-focused {
 }
 
 html[data-style='noir'] .engine-btn,
-html[data-style='noir'] .search-submit {
+html[data-style='noir'] .search-submit,
+html[data-style='noir'] .search-clear {
   border-radius: 9px;
+}
+
+html[data-style='noir'] .suggest-item {
+  border-radius: 8px;
+}
+
+html[data-style='noir'] .suggest-skeleton-icon {
+  border-radius: 5px;
 }
 
 html[data-style='noir'] .icon-btn.glass {
@@ -344,9 +353,18 @@ html[data-style='paper'] .search.is-focused {
 
 html[data-style='paper'] .engine-btn,
 html[data-style='paper'] .search-submit,
+html[data-style='paper'] .search-clear,
 html[data-style='paper'] .todo-add,
 html[data-style='paper'] .card-action {
   border-radius: 9px;
+}
+
+html[data-style='paper'] .suggest-item {
+  border-radius: 8px;
+}
+
+html[data-style='paper'] .suggest-skeleton-icon {
+  border-radius: 5px;
 }
 
 html[data-style='paper'] .icon-btn.glass {
@@ -597,6 +615,24 @@ html[data-style='native'] .search-submit:hover {
   color: #14161b;
 }
 
+html[data-style='native'] .search-submit.is-ready {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: color-mix(in srgb, var(--accent) 64%, #14161b);
+}
+
+html[data-style='native'] .search-clear {
+  color: rgba(20, 22, 27, 0.44);
+}
+
+html[data-style='native'] .search-clear:hover {
+  background: rgba(20, 22, 27, 0.08);
+  color: #14161b;
+}
+
+html[data-style='native'] .suggest-match {
+  color: color-mix(in srgb, var(--accent) 74%, #14161b);
+}
+
 html[data-style='native'] .search-hint {
   color: rgba(255, 255, 255, 0.62);
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
@@ -655,13 +691,14 @@ html[data-style='native'][data-tone='light'] .dateline {
 
 /* ---- 搜索下拉：原色下用实底，避免和壁纸打架 ---- */
 
+/* 下拉面板要整块压住壁纸：半透明会让背后的图标透出来，和每一行文字抢注意力 */
 html[data-style='native'] .suggest {
-  background: rgba(20, 22, 30, 0.92);
+  background: #14161e;
   border-color: rgba(255, 255, 255, 0.12);
 }
 
 html[data-style='native'][data-tone='light'] .suggest {
-  background: rgba(255, 255, 255, 0.94);
+  background: #ffffff;
   border-color: rgba(12, 14, 20, 0.1);
 }
 
@@ -884,6 +921,42 @@ html[data-style='editorial'] .suggest-group-label {
 html[data-style='editorial'] .suggest-group-label {
   font-family: var(--font-meta);
   letter-spacing: 0.2em;
+}
+
+html[data-style='editorial'] .engine-btn::after {
+  display: none;
+}
+
+html[data-style='editorial'] .search-clear {
+  width: 24px;
+  height: 24px;
+  border-radius: 2px;
+}
+
+html[data-style='editorial'] .search-clear:hover {
+  background: rgba(25, 23, 19, 0.06);
+  color: var(--ink);
+}
+
+html[data-style='editorial'] .suggest-item.is-active {
+  background: rgba(25, 23, 19, 0.06);
+  box-shadow: none;
+}
+
+html[data-style='editorial'] .suggest-match {
+  background: none;
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+html[data-style='editorial'] .suggest-foot {
+  border-top-color: var(--rule-soft);
+}
+
+html[data-style='editorial'] .suggest-skeleton-icon {
+  border-radius: 2px;
 }
 
 /* ---- 目录：编号 + 名称 + 域名 ---- */
@@ -1448,6 +1521,37 @@ html[data-style='terminal'] .suggest-item {
   font-size: 12px;
 }
 
+html[data-style='terminal'] .engine-btn::after {
+  display: none;
+}
+
+html[data-style='terminal'] .search-clear {
+  width: 24px;
+  height: 24px;
+  border-radius: 0;
+}
+
+html[data-style='terminal'] .search-clear:hover {
+  background: var(--menu-hover);
+  color: var(--accent);
+}
+
+html[data-style='terminal'] .suggest-item.is-active {
+  background: var(--menu-hover);
+  box-shadow: none;
+}
+
+html[data-style='terminal'] .suggest-match {
+  border-radius: 0;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+
+html[data-style='terminal'] .suggest-skeleton-icon,
+html[data-style='terminal'] .suggest-foot kbd {
+  border-radius: 0;
+}
+
 /* ---- 编号行 ---- */
 
 html[data-style='terminal'] .dock {
@@ -1582,6 +1686,23 @@ html[data-style='terminal'] .engine-badge {
   border: 1px solid var(--accent) !important;
   color: var(--accent) !important;
   font-weight: 700;
+}
+
+/* 品牌 logo 的白底会把终端风格戳出一个亮洞：改用同一枚字母徽标 */
+html[data-style='terminal'] .engine-badge.is-brand {
+  box-shadow: none;
+}
+
+html[data-style='terminal'] .engine-badge.is-brand img {
+  display: none;
+}
+
+html[data-style='terminal'] .engine-badge.is-brand::after {
+  content: attr(data-letter);
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--accent);
 }
 
 html[data-style='terminal'] .tile-img {

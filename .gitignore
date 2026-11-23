@@ -6,6 +6,7 @@ build/
 
 # 本地预览与截图（我调试 UI 时会临时生成）
 .shots/
+.tmp-*
 *.local.*
 
 # 日志

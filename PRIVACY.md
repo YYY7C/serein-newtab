@@ -20,7 +20,7 @@
 
 | 内容 | 存储位置 |
 |---|---|
-| 配置、快捷方式、文件夹、待办、便签 | `localStorage`（键 `serein.state.v1`） |
+| 配置、快捷方式、文件夹、待办、便签、最近搜索词 | `localStorage`（键 `serein.state.v1`） |
 | 你上传的壁纸、自定义图标 | IndexedDB（`serein-assets`） |
 | 兜底镜像（防止缓存被清理丢配置） | `chrome.storage.local` |
 
@@ -47,10 +47,13 @@
 | `api.bing.com` | 搜索联想开启且使用必应引擎时 | 输入的搜索词前缀 |
 | `suggestion.baidu.com` | 搜索联想开启且使用百度引擎时 | 输入的搜索词前缀 |
 | `sug.so.360.cn` | 搜索联想开启且使用 360 引擎时 | 输入的搜索词前缀 |
+| `suggestqueries.google.com` | 搜索联想开启且使用 Google 引擎时 | 输入的搜索词前缀 |
+| `duckduckgo.com` | 搜索联想开启且使用 DuckDuckGo 引擎时 | 输入的搜索词前缀 |
+| `s.search.bilibili.com` | 搜索联想开启且使用哔哩哔哩引擎时 | 输入的搜索词前缀 |
 | `api.open-meteo.com` | 天气小组件开启时 | 城市经纬度 |
 | `geocoding-api.open-meteo.com` | 在城市选择器里搜索城市时 | 输入的城市名 |
 
-搜索联想可以在设置里关闭；关闭后不会发出任何联想请求。
+搜索联想可以在设置里关闭；关闭后不会发出任何联想请求。「最近搜索」只保存在本机，可在设置中关闭记录或清除。
 
 ## 五、权限用途
 
@@ -83,4 +86,4 @@
 
 # Privacy Policy (English summary)
 
-Serein New Tab is a browser extension that **collects no user data**. There is no account, no server, no analytics, and no cloud sync. Settings, shortcuts, todos and notes live in your browser's `localStorage`; uploaded wallpapers and icons live in IndexedDB. Optional permissions (`bookmarks`, `topSites`) are only requested when you explicitly use those features. Network requests are limited to the six hosts listed above (Bing wallpaper/suggestions, Baidu/360 suggestions, Open-Meteo weather), and never include identifiers. Contact: the GitHub issues link above.
+Serein New Tab is a browser extension that **collects no user data**. There is no account, no server, no analytics, and no cloud sync. Settings, shortcuts, todos and notes live in your browser's `localStorage`; uploaded wallpapers and icons live in IndexedDB. Optional permissions (`bookmarks`, `topSites`) are only requested when you explicitly use those features. Network requests are limited to the hosts listed above (Bing wallpaper/suggestions, Baidu/360/Google/DuckDuckGo/Bilibili suggestions, Open-Meteo weather), and never include identifiers. Recent search terms stay in local storage and can be turned off or cleared in Settings. Contact: the GitHub issues link above.

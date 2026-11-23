@@ -6,7 +6,7 @@
 import { h, clear, svgIcon, bus, debounce, relativeTime, formatBytes, normalizeUrl, isUsableUrl } from './util.js';
 import * as store from './store.js';
 import { makeSwitch, makeSegmented, makeRange, makeStepper, shortcutEditor, confirmDialog, openModal } from './modals.js';
-import { GRADIENTS, ENGINES, engineById, APP, STYLES, styleById } from './defaults.js';
+import { GRADIENTS, ENGINES, engineById, APP, STYLES, styleById, RECENT_SEARCH_LIMIT } from './defaults.js';
 import { applyBackground, applyBackgroundLook, cycleBing, fetchBingGallery, saveLocalWallpaper, styleVeilPercent, STYLE_VEIL } from './wallpaper.js';
 import { applyConfig, dockWidth } from './theme.js';
 import { exportState, importState, resetAll, usageReport } from './data.js';
@@ -235,7 +235,7 @@ const HEADERS = {
   layout: '控制密度与信息层次。图标大小和列数会影响一屏能放多少内容。',
   shortcuts: '管理图标与文件夹。也可以直接在桌面右键图标进行编辑。',
   widgets: '侧边栏小组件。关掉不需要的可以让首屏更干净。',
-  search: '只影响本页的搜索跳转，不会修改浏览器默认搜索引擎。',
+  search: '只影响本页的搜索跳转，不会修改浏览器默认搜索引擎；最近搜索也只保存在本机。',
   data: '全部数据保存在本机，没有账号、没有云端同步。',
   about: '权限、网络请求与快捷键一览。',
 };
@@ -1395,6 +1395,22 @@ function buildWidgets() {
 
 function buildSearch() {
   const search = store.state.config.search;
+  const recentCount = () => (Array.isArray(search.recent) ? search.recent.length : 0);
+  const recentHint = h('span', {
+    text: `${recentCount()} 条，仅保存在本机；关掉上面的开关后不再新增`,
+  });
+  const clearRecent = h('button', {
+    class: 'btn',
+    type: 'button',
+    text: '清除',
+    disabled: recentCount() === 0,
+    onclick: () => {
+      search.recent = [];
+      recentHint.textContent = '0 条，仅保存在本机；关掉上面的开关后不再新增';
+      clearRecent.disabled = true;
+      touch();
+    },
+  });
 
   const engineGrid = h(
     'div',
@@ -1437,12 +1453,21 @@ function buildSearch() {
       '联想与跳转',
       row(
         '搜索联想',
-        '百度 / 必应 / 360 支持；需要访问对应接口',
+        'Google / 必应 / 百度 / 360 / DuckDuckGo / 哔哩哔哩支持；仅在你输入时请求对应接口',
         makeSwitch(search.suggestions, (value) => {
           search.suggestions = value;
           touch();
         })
       ),
+      row(
+        '记录最近搜索',
+        `聚焦搜索框时显示最近 ${RECENT_SEARCH_LIMIT} 条关键词；只保存在本机，不会上传`,
+        makeSwitch(search.history, (value) => {
+          search.history = value;
+          touch();
+        })
+      ),
+      row('最近搜索记录', recentHint, clearRecent),
       row(
         '在新标签页打开结果',
         '关闭后直接在当前新标签页里跳转',
@@ -1510,7 +1535,7 @@ function buildData() {
       '备份',
       row(
         '导出配置',
-        '生成 JSON 备份（含配置、图标/壁纸引用与待办，不含上传的图片文件）',
+        '生成 JSON 备份（含配置、快捷方式、待办与最近搜索，不含上传的图片文件）',
         h('button', {
           class: 'btn',
           type: 'button',
@@ -1594,6 +1619,9 @@ const NETWORK = [
   ['api.bing.com', '必应搜索联想'],
   ['suggestion.baidu.com', '百度搜索联想'],
   ['sug.so.360.cn', '360 搜索联想'],
+  ['suggestqueries.google.com', 'Google 搜索联想'],
+  ['duckduckgo.com', 'DuckDuckGo 搜索联想'],
+  ['s.search.bilibili.com', '哔哩哔哩搜索联想'],
   ['api.open-meteo.com', '天气数据'],
   ['geocoding-api.open-meteo.com', '城市搜索'],
 ];
@@ -1657,7 +1685,7 @@ function showShortcuts() {
     [`${mod} + K`, '聚焦搜索框'],
     ['/', '聚焦搜索框（非输入状态）'],
     [`${mod} + ,`, '打开设置'],
-    ['Esc', '关闭当前浮层'],
+    ['Esc', '关闭浮层 / 收起联想（搜索框里再按一次清空）'],
     ['↑ ↓', '在搜索结果间移动'],
     ['Tab', '收起联想并离开搜索框'],
     ['← → ↑ ↓', '在图标间移动焦点'],

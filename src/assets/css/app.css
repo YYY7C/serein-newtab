@@ -337,41 +337,51 @@ html[data-tone='light'] .clock {
 .search {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   height: 56px;
-  padding: 0 8px 0 10px;
+  padding: 0 7px 0 8px;
   border-radius: 999px;
   background: var(--glass-bg);
   border: 1px solid var(--glass-border);
   backdrop-filter: blur(calc(var(--glass-blur) + 6px)) saturate(180%);
   -webkit-backdrop-filter: blur(calc(var(--glass-blur) + 6px)) saturate(180%);
-  box-shadow: var(--glass-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  box-shadow:
+    var(--glass-shadow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.06);
   transition: background 0.2s var(--ease), border-color 0.2s var(--ease), box-shadow 0.24s var(--ease),
     transform 0.24s var(--ease);
 }
 
 .search:hover {
   background: var(--glass-bg-hover);
+  border-color: var(--glass-border-strong);
 }
 
 .search.is-focused {
-  background: color-mix(in srgb, var(--glass-bg) 60%, var(--panel-bg-solid));
+  background: color-mix(in srgb, var(--glass-bg) 58%, var(--panel-bg-solid));
   border-color: color-mix(in srgb, var(--accent) 52%, transparent);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent), var(--glass-shadow);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent),
+    0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent),
+    var(--glass-shadow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
   transform: translateY(-1px);
 }
 
 .engine-btn {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 7px;
-  height: 40px;
-  padding: 0 12px 0 8px;
+  gap: 8px;
+  height: 42px;
+  margin-right: 4px;
+  padding: 0 10px 0 5px;
   border-radius: 999px;
   font-size: 13px;
   font-weight: 600;
   color: var(--fg-1);
-  transition: background 0.16s var(--ease);
+  transition: background 0.16s var(--ease), color 0.16s var(--ease);
   flex: none;
 }
 
@@ -380,28 +390,28 @@ html[data-tone='light'] .clock {
 }
 
 /* 引擎 chip 与输入区之间一条发丝分隔：点一下能换引擎这件事才看得出来 */
-.engine-btn {
-  position: relative;
-}
-
 .engine-btn::after {
   content: '';
   position: absolute;
-  right: -2px;
+  right: 0;
   top: 50%;
   width: 1px;
-  height: 18px;
+  height: 20px;
   border-radius: 1px;
   transform: translateY(-50%);
   background: var(--divider);
   pointer-events: none;
 }
 
+.search.is-focused .engine-btn::after {
+  background: color-mix(in srgb, var(--accent) 28%, var(--divider));
+}
+
 .engine-badge {
   display: grid;
   place-items: center;
-  width: 24px;
-  height: 24px;
+  width: 25px;
+  height: 25px;
   border-radius: 8px;
   font-size: 11px;
   font-weight: 800;
@@ -433,17 +443,54 @@ html[data-tone='light'] .clock {
   flex: 1 1 auto;
   min-width: 0;
   height: 100%;
-  padding: 0 6px;
+  padding: 0 4px 0 8px;
   font-size: 15.5px;
   font-weight: 450;
+  letter-spacing: -0.006em;
   color: var(--fg);
   background: transparent;
   caret-color: var(--accent);
 }
 
+/* 输入框本身不加矩形焦点框：整个药丸已经有 .is-focused 的强调环了 */
+.search-input:focus,
+.search-input:focus-visible {
+  outline: none;
+}
+
 .search-input::placeholder {
   color: color-mix(in srgb, var(--fg-2) 82%, transparent);
   font-weight: 400;
+}
+
+.search-input::selection {
+  background: color-mix(in srgb, var(--accent) 36%, transparent);
+}
+
+/* 有内容时才出现的清空键：比让用户长按退格更直接 */
+.search-clear {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-right: 2px;
+  border-radius: 999px;
+  color: var(--fg-3);
+  flex: none;
+  transition: background 0.16s var(--ease), color 0.16s var(--ease), transform 0.16s var(--ease);
+}
+
+.search-clear[hidden] {
+  display: none;
+}
+
+.search-clear:hover {
+  background: var(--glass-bg-hover);
+  color: var(--fg-1);
+}
+
+.search-clear:active {
+  transform: scale(0.9);
 }
 
 .search-submit {
@@ -453,13 +500,26 @@ html[data-tone='light'] .clock {
   height: 40px;
   border-radius: 999px;
   color: var(--fg-2);
-  transition: background 0.16s var(--ease), color 0.16s var(--ease), transform 0.16s var(--ease);
+  transition: background 0.16s var(--ease), color 0.16s var(--ease), box-shadow 0.16s var(--ease),
+    transform 0.16s var(--ease);
   flex: none;
 }
 
 .search-submit:hover {
   background: color-mix(in srgb, var(--accent) 24%, transparent);
   color: var(--fg);
+}
+
+/* 输入框里有词时让搜索键染上强调色：视觉上明确「现在按下去会发生什么」 */
+.search-submit.is-ready {
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: color-mix(in srgb, var(--accent) 72%, var(--fg));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.search-submit.is-ready:hover {
+  background: color-mix(in srgb, var(--accent) 26%, transparent);
+  color: color-mix(in srgb, var(--accent) 86%, var(--fg));
 }
 
 .search-submit:active {
@@ -470,24 +530,50 @@ html[data-tone='light'] .clock {
 
 .suggest {
   position: absolute;
-  top: calc(100% + 10px);
+  top: calc(100% + 8px);
   left: 0;
   right: 0;
-  padding: 8px;
+  padding: 6px;
   border-radius: var(--radius-md);
-  background: var(--panel-bg);
+  /* 壁纸上直接透出底色会让文字和后面的图标糊在一起：面板比普通浮层更实一点 */
+  background: color-mix(in srgb, var(--panel-bg-solid) 98%, var(--panel-bg));
   border: 1px solid var(--panel-border);
   backdrop-filter: blur(28px) saturate(180%);
   -webkit-backdrop-filter: blur(28px) saturate(180%);
-  box-shadow: var(--panel-shadow);
-  max-height: 392px;
+  box-shadow:
+    var(--panel-shadow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  max-height: min(440px, 62vh);
   overflow-y: auto;
+  overscroll-behavior: contain;
   opacity: 0;
-  transform: translateY(-6px) scale(0.985);
+  transform: translateY(-7px) scale(0.988);
   transform-origin: top center;
   pointer-events: none;
   transition: opacity 0.18s var(--ease), transform 0.18s var(--ease);
   z-index: 20;
+  scrollbar-width: thin;
+  scrollbar-color: var(--fg-4) transparent;
+}
+
+.suggest::-webkit-scrollbar {
+  width: 8px;
+}
+
+.suggest::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.suggest::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 99px;
+  background: var(--fg-4);
+  background-clip: content-box;
+}
+
+.suggest::-webkit-scrollbar-thumb:hover {
+  background: var(--fg-3);
+  background-clip: content-box;
 }
 
 .suggest.is-open {
@@ -496,7 +582,16 @@ html[data-tone='light'] .clock {
   pointer-events: auto;
 }
 
+.suggest-group + .suggest-group,
+.suggest-group + .suggest-foot {
+  margin-top: 2px;
+}
+
 .suggest-group-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   padding: 8px 10px 5px;
   font-size: 10.5px;
   font-weight: 700;
@@ -505,26 +600,74 @@ html[data-tone='light'] .clock {
   text-transform: uppercase;
 }
 
+.suggest-group-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.suggest-action {
+  flex: none;
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-transform: none;
+  color: var(--fg-3);
+  transition: background 0.14s var(--ease), color 0.14s var(--ease);
+}
+
+.suggest-action:hover {
+  background: var(--menu-hover);
+  color: var(--fg-1);
+}
+
 .suggest-item {
   display: flex;
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 9px 10px;
+  min-height: 38px;
+  padding: 8px 10px;
   border-radius: 10px;
   font-size: 13.5px;
+  line-height: 1.35;
   color: var(--fg-1);
   text-align: left;
-  transition: background 0.12s var(--ease);
+  transition: background 0.12s var(--ease), box-shadow 0.12s var(--ease), color 0.12s var(--ease);
 }
 
-.suggest-item:hover,
-.suggest-item.is-active {
+.suggest-item:hover {
   background: var(--menu-hover);
 }
 
-.suggest-item .ico {
+.suggest-item.is-active {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.suggest-item.is-active .suggest-icon {
+  color: var(--accent);
+}
+
+.suggest-item.is-primary .suggest-icon {
+  color: var(--accent);
+}
+
+.suggest-icon {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  flex: none;
   color: var(--fg-3);
+  transition: color 0.12s var(--ease);
+}
+
+.suggest-item .ico {
+  color: inherit;
 }
 
 .suggest-thumb {
@@ -566,6 +709,15 @@ html[data-tone='light'] .clock {
   white-space: nowrap;
 }
 
+/* 匹配到的字符只做轻提示，不用浏览器默认的荧光黄 */
+.suggest-match {
+  padding: 0 1px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
+  color: color-mix(in srgb, var(--accent) 62%, var(--fg));
+  font-weight: 650;
+}
+
 .suggest-hint {
   font-size: 11px;
   color: var(--fg-3);
@@ -576,31 +728,175 @@ html[data-tone='light'] .clock {
   white-space: nowrap;
 }
 
+.suggest-item.is-active .suggest-hint {
+  color: var(--fg-2);
+}
+
+/* 联想加载中的骨架行：避免网络慢时看起来像没反应 */
+.suggest-loading-dots {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--fg-3);
+  animation: suggest-pulse 1.2s var(--ease) infinite;
+}
+
+.suggest-skeleton {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  padding: 8px 10px;
+}
+
+.suggest-skeleton-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  flex: none;
+  background: color-mix(in srgb, var(--fg-3) 20%, transparent);
+}
+
+.suggest-skeleton-bar {
+  width: 58%;
+  height: 9px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--fg-3) 14%, transparent) 0%,
+    color-mix(in srgb, var(--fg-3) 30%, transparent) 50%,
+    color-mix(in srgb, var(--fg-3) 14%, transparent) 100%
+  );
+  background-size: 220% 100%;
+  animation: suggest-shimmer 1.15s linear infinite;
+}
+
+.suggest-skeleton:last-child .suggest-skeleton-bar {
+  width: 38%;
+}
+
+/* 联想失败的说明行：和候选行等高，但不参与方向键选择 */
+.suggest-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  color: var(--fg-3);
+}
+
+.suggest-status .suggest-icon {
+  color: var(--fg-3);
+}
+
+.suggest-status-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@keyframes suggest-shimmer {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -120% 0;
+  }
+}
+
+@keyframes suggest-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+/* 键盘提示只放在面板底部，不占用每一行的高度 */
+.suggest-foot {
+  position: sticky;
+  bottom: -6px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 4px;
+  padding: 8px 10px 4px;
+  border-top: 1px solid var(--divider);
+  background: inherit;
+  font-size: 10.5px;
+  color: var(--fg-3);
+}
+
+.suggest-foot-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.suggest-foot kbd {
+  display: inline-block;
+  padding: 1px 4px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  line-height: 1.45;
+  color: var(--fg-2);
+  background: color-mix(in srgb, var(--fg-3) 8%, transparent);
+  border: 1px solid var(--divider);
+}
+
 .search-hint {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 14px;
+  flex-wrap: wrap;
+  gap: 6px 14px;
   margin-top: 12px;
   font-size: 11.5px;
   color: var(--fg-3);
   opacity: 0;
+  pointer-events: none;
   transition: opacity 0.3s var(--ease);
+}
+
+.search-hint span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
 
 .search-hint kbd {
   display: inline-block;
-  padding: 1px 5px;
+  min-width: 18px;
+  padding: 2px 6px;
   border-radius: 5px;
   font-family: var(--font-mono);
   font-size: 10.5px;
+  line-height: 1.3;
+  text-align: center;
   background: var(--glass-bg);
   border: 1px solid var(--glass-border);
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.1);
 }
 
 .search-wrap:hover .search-hint,
 .search-wrap.is-focused .search-hint {
   opacity: 1;
+}
+
+/* 面板打开时它自己有键盘提示，下面这行提示只会把浮层往下挤 */
+.search-wrap.is-open .search-hint {
+  opacity: 0;
 }
 
 /* ------------------------------------------------------------------ 网格 */
@@ -1590,8 +1886,40 @@ html[data-style='terminal'] .grid > .tile.drop-after::before {
   }
   .search {
     height: 50px;
+    padding: 0 5px 0 6px;
+  }
+  .engine-btn {
+    gap: 6px;
+    margin-right: 2px;
+    padding: 0 6px 0 3px;
+  }
+  .engine-btn::after {
+    display: none;
   }
   .engine-btn span:not(.engine-badge) {
+    display: none;
+  }
+  .search-input {
+    padding: 0 2px 0 6px;
+    font-size: 15px;
+  }
+  .search-clear {
+    width: 26px;
+    height: 26px;
+    margin-right: 0;
+  }
+  .search-submit {
+    width: 36px;
+    height: 36px;
+  }
+  .suggest {
+    top: calc(100% + 6px);
+    max-height: min(60vh, 360px);
+  }
+  .suggest-foot {
+    display: none;
+  }
+  .search-hint {
     display: none;
   }
 }
