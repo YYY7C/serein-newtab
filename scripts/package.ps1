@@ -1,7 +1,8 @@
 ﻿# 把 src/ 打成可以直接上传到 Chrome Web Store / Edge Add-ons 的 zip。
 #
 # 用法：
-#   powershell -ExecutionPolicy Bypass -File scripts\package.ps1
+#   powershell -ExecutionPolicy Bypass -File scripts\package.ps1   （Windows PowerShell）
+#   pwsh -NoProfile -File scripts/package.ps1                      （PowerShell 7 / Linux CI）
 #
 # 产物：dist/serein-newtab-v<manifest.version>.zip
 # 要点：manifest.json 必须在 zip 根目录（不能带 src/ 这一层）；

@@ -6,7 +6,7 @@
 import { h, clear, svgIcon, bus, debounce, relativeTime, formatBytes, normalizeUrl, isUsableUrl } from './util.js';
 import * as store from './store.js';
 import { makeSwitch, makeSegmented, makeRange, makeStepper, shortcutEditor, confirmDialog, openModal } from './modals.js';
-import { GRADIENTS, ENGINES, engineById, APP, STYLES, styleById, RECENT_SEARCH_LIMIT } from './defaults.js';
+import { GRADIENTS, ENGINES, APP, STYLES, styleById, RECENT_SEARCH_LIMIT } from './defaults.js';
 import { applyBackground, applyBackgroundLook, cycleBing, fetchBingGallery, saveLocalWallpaper, styleVeilPercent, STYLE_VEIL } from './wallpaper.js';
 import { applyConfig, dockWidth } from './theme.js';
 import { exportState, importState, resetAll, usageReport } from './data.js';
@@ -56,6 +56,11 @@ export function initSettings() {
   document.body.appendChild(root);
 
   buildNav();
+
+  // 其它标签页改了配置（例如换壁纸/改布局）：设置面板开着时同步重建当前分区
+  window.addEventListener('serein:state-adopted', () => {
+    if (isOpen) selectSection(activeTab);
+  });
 
   scrim.addEventListener('click', close);
   panel.addEventListener('keydown', (event) => {
@@ -1507,7 +1512,7 @@ function buildData() {
 
   const importInput = h('input', {
     type: 'file',
-    accept: 'application/json,.json',
+    accept: 'application/zip,.zip,application/json,.json',
     style: { display: 'none' },
     onchange: async (event) => {
       const file = event.target.files?.[0];
@@ -1516,7 +1521,11 @@ function buildData() {
         const result = await importState(file);
         applyBackground(store.state);
         refreshClock();
-        bus.emit('toast', { text: `已导入 ${result.count} 个快捷方式` });
+        bus.emit('toast', {
+          text: result.assets
+            ? `已导入 ${result.count} 个快捷方式、${result.assets} 张图片`
+            : `已导入 ${result.count} 个快捷方式（旧格式备份不含图片）`,
+        });
         if (isOpen) {
           selectSection('data');
           navEl.querySelector('.nav-item.is-active')?.focus({ preventScroll: true });
@@ -1535,20 +1544,26 @@ function buildData() {
       '备份',
       row(
         '导出配置',
-        '生成 JSON 备份（含配置、快捷方式、待办与最近搜索，不含上传的图片文件）',
+        '生成 zip 备份：配置、快捷方式、待办、最近搜索，以及上传的壁纸和图标',
         h('button', {
           class: 'btn',
           type: 'button',
           html: `${svgIcon('download', 14)}<span>导出</span>`,
-          onclick: () => {
-            exportState();
-            bus.emit('toast', { text: '已生成备份文件' });
+          onclick: async () => {
+            try {
+              const result = await exportState();
+              bus.emit('toast', {
+                text: `已导出备份（含 ${result.assetCount} 张图片，${formatBytes(result.bytes)}）`,
+              });
+            } catch (err) {
+              bus.emit('toast', { text: `导出失败：${err.message}`, error: true });
+            }
           },
         })
       ),
       row(
         '导入配置',
-        '会覆盖配置、快捷方式、待办与便签（上传的图片文件不在 JSON 里），请先导出备份',
+        '支持新的 zip 备份（含图片）与旧版 JSON 备份；会覆盖现有配置、快捷方式、待办与便签',
         h(
           'div',
           { style: { display: 'flex', alignItems: 'center' } },
@@ -1655,7 +1670,19 @@ function buildAbout() {
         })
       )
     ),
-    group('权限清单', h('div', { class: 'info-block', style: { padding: '4px 0', background: 'transparent', border: 'none' } }, table(PERMISSIONS, ['权限', '用途说明']))),
+    group(
+      '权限清单',
+      h(
+        'div',
+        { class: 'info-block' },
+        '常驻 3 个基础权限（下表前三项）与 9 个固定服务域名（见「网络请求」）；没有 <all_urls>，没有远程代码。'
+      ),
+      h(
+        'div',
+        { class: 'info-block', style: { padding: '4px 0', background: 'transparent', border: 'none' } },
+        table(PERMISSIONS, ['权限', '用途说明'])
+      )
+    ),
     group('网络请求', h('div', { class: 'info-block', style: { padding: '4px 0', background: 'transparent', border: 'none' } }, table(NETWORK, ['域名', '用途']))),
     group(
       '许可与致谢',

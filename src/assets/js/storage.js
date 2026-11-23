@@ -14,6 +14,43 @@ const MIRROR_KEY = 'serein.mirror.v1';
 const LEGACY_STATE_KEY = 'lumen.state.v1';
 const LEGACY_MIRROR_KEY = 'lumen.mirror.v1';
 const MIRROR_INTERVAL = 5 * 60 * 1000; // 镜像最多 5 分钟写一次，避免无谓 IO
+const STATE_CHANNEL = 'serein.state';
+
+/** 同一扩展的其它标签页：storage 事件跨标签，BroadcastChannel 更快，两者互为兜底 */
+let stateChannel = null;
+try {
+  stateChannel = typeof BroadcastChannel === 'function' ? new BroadcastChannel(STATE_CHANNEL) : null;
+} catch {
+  stateChannel = null;
+}
+
+export function broadcastState(state) {
+  try {
+    stateChannel?.postMessage({ type: 'state', state });
+  } catch {
+    /* 非扩展环境或已关闭，忽略 */
+  }
+}
+
+export function watchExternalState(onState) {
+  const onStorage = (event) => {
+    if (event.key !== STATE_KEY || !event.newValue) return;
+    try {
+      onState(JSON.parse(event.newValue));
+    } catch (err) {
+      console.warn('[serein/storage] 外部状态无法解析，已忽略', err);
+    }
+  };
+  window.addEventListener('storage', onStorage);
+  const onMessage = (event) => {
+    if (event.data?.type === 'state' && event.data.state) onState(event.data.state);
+  };
+  stateChannel?.addEventListener('message', onMessage);
+  return () => {
+    window.removeEventListener('storage', onStorage);
+    stateChannel?.removeEventListener('message', onMessage);
+  };
+}
 
 /* ------------------------------------------------------------ localStorage */
 

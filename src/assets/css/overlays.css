@@ -935,6 +935,60 @@ kbd {
   background: color-mix(in srgb, var(--panel-bg-solid) 94%, var(--fg) 2%);
 }
 
+/* ---- 首次启动引导 ---- */
+
+.onboard {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.onboard-lead {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--fg-2);
+}
+
+.onboard-cities {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.onboard-city {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.onboard-tips {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 12px 14px;
+  list-style: none;
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-sm);
+  background: var(--input-bg);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--fg-2);
+}
+
+.onboard-tips kbd {
+  display: inline-block;
+  min-width: 18px;
+  margin: 0 4px 0 0;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--fg-1);
+  background: color-mix(in srgb, var(--fg-3) 10%, transparent);
+  border: 1px solid var(--divider);
+}
+
 .field {
   margin-bottom: 14px;
 }

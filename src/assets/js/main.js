@@ -4,10 +4,10 @@
  * 再挂各功能模块，最后做一次持久化存储请求。
  */
 
-import { $, h, clear, svgIcon, bus } from './util.js';
+import { $, h, clear, svgIcon, bus, debounce } from './util.js';
 import * as store from './store.js';
-import { applyConfig } from './theme.js';
-import { initBackground, applyBackground, cycleBing } from './wallpaper.js';
+import { applyConfig, syncDensity } from './theme.js';
+import { initBackground, applyBackground, applyBackgroundLook, cycleBing } from './wallpaper.js';
 import { initClock, refreshClock } from './clock.js';
 import { initSearch } from './search.js';
 import { initTiles } from './tiles.js';
@@ -176,18 +176,48 @@ function boot() {
   initWidgets();
 
   renderTopbar();
+  syncDensity(store.state);
+
+  let densityTimer = 0;
+  const scheduleDensity = () => {
+    clearTimeout(densityTimer);
+    densityTimer = setTimeout(() => syncDensity(store.state), 180);
+  };
+  window.addEventListener('resize', debounce(scheduleDensity, 150));
 
   store.subscribe((scope) => {
+    if (scope === 'storage-error') {
+      showToast({ text: '本地存储写入失败，请检查剩余空间', error: true });
+      return;
+    }
     if (scope === 'config' || scope === 'all') {
       applyConfig(store.state);
+      // 风格变化会改变遮罩强度与滤镜：无论从设置页、导入还是其它入口改 config，都同步一次
+      applyBackgroundLook(store.state);
       renderTopbar();
-    } else if (scope === 'storage-error') {
-      showToast({ text: '本地存储写入失败，请检查剩余空间', error: true });
     }
+    // 网格/侧栏/天气变化都会改变内容高度：稳定后重新判断是否需要紧凑密度
+    scheduleDensity();
+  });
+
+  // 采纳了其它标签页的状态：主题已由 emit('all') 落好，壁纸与时钟要单独补一次
+  window.addEventListener('serein:state-adopted', () => {
+    applyBackground(store.state);
+    refreshClock();
   });
 
   // 壁纸相关字段变动时重绘背景（设置页里已经直接调用，这里兜住其他入口）
   requestPersistentStorage();
+
+  // 首次启动：延迟到首屏稳定后再问城市，避免和动画/密度切换抢布局
+  const skipOnboarding = new URLSearchParams(location.search).has('no-onboard');
+  if (!store.state.meta.onboarded && !skipOnboarding) {
+    setTimeout(() => {
+      import('./onboarding.js')
+        .then((module) => module.showOnboarding())
+        .catch((err) => console.warn('[serein] 引导加载失败', err));
+    }, 700);
+  }
 
   // localStorage 被清空后，用 chrome.storage.local 的镜像把配置找回来
   store.restoreFromMirror().then(async (restored) => {

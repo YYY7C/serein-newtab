@@ -48,6 +48,25 @@ export function dockWidth(layout = {}) {
   return Math.round(columns * cellSize(iconSize) + (columns - 1) * gap);
 }
 
+const COMPACT_SCALE = { icon: 0.86, gap: 0.72, gapY: 0.72 };
+
+function gridMetrics(layout, compact) {
+  const scale = compact ? COMPACT_SCALE : { icon: 1, gap: 1, gapY: 1 };
+  const iconSize = Math.max(32, Math.round(clamp(layout.iconSize ?? 60, 40, 96) * scale.icon));
+  const gap = Math.max(4, Math.round(clamp(layout.gap ?? 20, 4, 64) * scale.gap));
+  const gapY = Math.max(4, Math.round(clamp(layout.gapY ?? Math.round((layout.gap ?? 20) * 0.9), 4, 64) * scale.gapY));
+  const columns = Math.round(clamp(layout.columns ?? 6, 3, 14));
+  const cell = cellSize(iconSize);
+  return {
+    iconSize,
+    gap,
+    gapY,
+    columns,
+    cell,
+    width: Math.round(columns * cell + (columns - 1) * gap),
+  };
+}
+
 export function applyConfig(state) {
   const config = state.config;
   const root = document.documentElement;
@@ -71,20 +90,17 @@ export function applyConfig(state) {
   style.setProperty('--radius-lg', `${radius}px`);
   style.setProperty('--radius-xl', `${radius * 1.36}px`);
 
-  /* 网格 */
+  /* 网格：窗口高度不够时切到紧凑密度（列表型风格不缩列宽） */
   const layout = config.layout;
-  const iconSize = clamp(layout.iconSize ?? 60, 40, 96);
-  const columns = Math.round(clamp(layout.columns ?? 6, 3, 14));
-  const gap = clamp(layout.gap ?? 20, 4, 64);
-  const cell = cellSize(iconSize);
-  // 行距是独立字段，缺省时沿用旧版「列距 × 0.9」的观感
-  const gapY = clamp(layout.gapY ?? Math.round(gap * 0.9), 4, 64);
-  style.setProperty('--icon-size', `${iconSize}px`);
-  style.setProperty('--grid-gap', `${gap}px`);
-  style.setProperty('--grid-gap-y', `${gapY}px`);
-  style.setProperty('--grid-cols', String(columns));
-  style.setProperty('--cell', `${cell}px`);
-  style.setProperty('--dock-w', `${dockWidth(layout)}px`);
+  const listMode = config.style === 'editorial' || config.style === 'terminal';
+  const compact = root.dataset.density === 'compact' && !listMode;
+  const metrics = gridMetrics(layout, compact);
+  style.setProperty('--icon-size', `${metrics.iconSize}px`);
+  style.setProperty('--grid-gap', `${metrics.gap}px`);
+  style.setProperty('--grid-gap-y', `${metrics.gapY}px`);
+  style.setProperty('--grid-cols', String(metrics.columns));
+  style.setProperty('--cell', `${metrics.cell}px`);
+  style.setProperty('--dock-w', `${listMode ? dockWidth(layout) : metrics.width}px`);
   const fontScale = clamp(config.fontScale ?? 1, 0.8, 1.4);
   style.setProperty('--font-scale', String(fontScale));
   // 只有非 1 时才给 stage 加 transform，避免默认状态下多一层合成层
@@ -99,6 +115,28 @@ export function applyConfig(state) {
   /* 内容垂直居中 */
   const content = document.getElementById('content');
   if (content) content.classList.toggle('is-top', layout.verticalCenter === false);
+}
+
+/**
+ * 按内容是否溢出切换 cozy / compact。
+ * 先按常规密度测量，溢出才切紧凑；两者都溢出时保留 compact 并允许滚动。
+ */
+export function syncDensity(state) {
+  const content = document.getElementById('content');
+  const root = document.documentElement;
+  if (!content) return root.dataset.density || 'cozy';
+
+  root.dataset.density = 'cozy';
+  applyConfig(state);
+  void content.offsetHeight;
+  const overflow = content.scrollHeight > content.clientHeight + 2;
+
+  if (overflow) {
+    root.dataset.density = 'compact';
+    applyConfig(state);
+    void content.offsetHeight;
+  }
+  return root.dataset.density;
 }
 
 /** 列表型风格：图标以「编号 + 名称 + 域名」的文本行呈现 */

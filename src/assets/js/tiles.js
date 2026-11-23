@@ -368,7 +368,7 @@ function buildAddTile(index) {
   tile.appendChild(h('div', { class: 'tile-icon', 'aria-hidden': 'true', html: svgIcon('plus', 24) }));
   tile.appendChild(h('div', { class: 'tile-label', text: '添加' }));
 
-  tile.addEventListener('click', (event) => {
+  tile.addEventListener('click', () => {
     const rect = tile.getBoundingClientRect();
     openMenu(
       [

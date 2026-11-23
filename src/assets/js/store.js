@@ -6,13 +6,24 @@
  * scope: all | config | shortcuts | groups | todos | notes | weather
  */
 
-import { files, readLocal, readChromeMirror, writeLocal, mirrorToChrome } from './storage.js';
+import {
+  files,
+  readLocal,
+  readChromeMirror,
+  writeLocal,
+  mirrorToChrome,
+  broadcastState,
+  watchExternalState,
+} from './storage.js';
 import { createDefaultState, migrate } from './defaults.js';
 import { uid, normalizeUrl, isUsableUrl } from './util.js';
 
 const listeners = new Set();
 let saveTimer = 0;
-let pendingScope = null;
+/** 本标签页是否有尚未落盘的用户修改：pagehide 时只有脏状态才允许写回 */
+let dirty = false;
+/** 只有后台缓存（天气、壁纸元数据）待写：磁盘更新时可直接让位，不算用户改动 */
+let softDirty = false;
 
 /** 启动瞬间 localStorage 是否已有数据——决定需不需要走镜像兜底 */
 const bootSnapshot = readLocal();
@@ -28,6 +39,9 @@ function migrateBootState(raw) {
 }
 
 export const state = migrateBootState(bootSnapshot);
+
+/** 已知的最新版本号：用于判断其它标签页写入的状态是否更新 */
+let baseRev = Number(state.meta?.rev) || 0;
 
 /* ------------------------------------------------------------- 读取订阅 */
 
@@ -78,13 +92,47 @@ function emit(scope) {
 
 function flush(forceMirror = false) {
   saveTimer = 0;
+  // 没改过就不写：一个早打开、从未编辑的标签页关闭时，
+  // 不能让它的旧快照覆盖别的标签页刚写入的新数据。
+  if (!dirty && !softDirty) return true;
+
+  const disk = readLocal();
+  const diskRev = Number(disk?.meta?.rev) || 0;
+  if (diskRev > baseRev) {
+    if (!dirty) {
+      // 只有后台缓存待写：磁盘上的用户修改优先，采纳它并丢弃本地缓存，
+      // 天气/壁纸元数据下次会自己重新获取，不会丢用户内容。
+      softDirty = false;
+      if (disk && typeof disk === 'object') adoptState(disk);
+      return true;
+    }
+    // 另一个标签页先写过，而本地有用户修改。L1 策略：本地为准（最后编辑者胜），
+    // 但记录冲突次数，方便以后排查或升级为按实体合并。
+    state.meta.conflict = (Number(state.meta.conflict) || 0) + 1;
+    console.warn('[serein/store] 检测到其它标签页的更新，本次写入以当前标签页为准', {
+      diskRev,
+      baseRev,
+    });
+  }
+
+  state.meta.rev = Math.max(baseRev, diskRev, Number(state.meta.rev) || 0) + 1;
+  state.meta.updatedAt = Date.now();
+
   const ok = writeLocal(state);
-  if (ok) mirrorToChrome(state, forceMirror);
+  if (ok) {
+    baseRev = state.meta.rev;
+    dirty = false;
+    softDirty = false;
+    mirrorToChrome(state, forceMirror);
+    broadcastState(state);
+  }
   if (!ok) emit('storage-error');
   return ok;
 }
 
-function scheduleSave() {
+function scheduleSave(soft = false) {
+  if (soft) softDirty = true;
+  else dirty = true;
   clearTimeout(saveTimer);
   saveTimer = setTimeout(flush, 180);
 }
@@ -116,6 +164,9 @@ export async function restoreFromMirror() {
         bootSnapshot.weather
     );
   if (hasBootData) return false;
+  // 启动到镜像恢复之间可能已经有别的标签页写入：有数据就让位，别拿旧镜像覆盖
+  const current = readLocal();
+  if (current && typeof current === 'object' && Object.keys(current).length) return false;
   const mirror = await readChromeMirror();
   if (!mirror || typeof mirror !== 'object' || Array.isArray(mirror) || !Object.keys(mirror).length) return false;
 
@@ -131,21 +182,67 @@ export async function restoreFromMirror() {
   Object.assign(state, next);
 
   writeLocal(state);
+  baseRev = Number(state.meta?.rev) || 0;
+  dirty = false;
+  broadcastState(state);
   emit('all');
+  window.dispatchEvent(new CustomEvent('serein:state-adopted'));
   return true;
+}
+
+/* --------------------------------------------------------- 其它标签页 */
+
+function isEditingTarget() {
+  const el = document.activeElement;
+  if (!el || el === document.body) return false;
+  return Boolean(el.closest?.('input, textarea, select, [contenteditable="true"]'));
+}
+
+/** 采纳其它标签页写入的状态；原地替换，保证所有已持有的引用继续有效 */
+function adoptState(next) {
+  if (!next || typeof next !== 'object') return false;
+  if (!next.config || !Array.isArray(next.shortcuts)) return false;
+  let migrated;
+  try {
+    migrated = migrate(next);
+  } catch (err) {
+    console.warn('[serein/store] 其它标签页的状态无法迁移，已忽略', err);
+    return false;
+  }
+  clearTimeout(saveTimer);
+  saveTimer = 0;
+  dirty = false;
+  softDirty = false;
+  for (const key of Object.keys(state)) delete state[key];
+  Object.assign(state, migrated);
+  baseRev = Number(state.meta?.rev) || baseRev;
+  emit('all');
+  // 壁纸与时钟不在 emit('all') 的重绘链路里，由 main.js 监听这个事件补一次
+  window.dispatchEvent(new CustomEvent('serein:state-adopted'));
+  return true;
+}
+
+function handleExternalState(next) {
+  if (!next || typeof next !== 'object') return;
+  const rev = Number(next.meta?.rev) || 0;
+  if (rev <= baseRev) return;
+  // 本地有未保存修改，或用户正在输入：保留本地，避免把正在打的字冲掉。
+  // 下一次 flush 会 bump rev，仍然满足「最后编辑者胜」。
+  if (dirty || saveTimer || isEditingTarget()) return;
+  adoptState(next);
 }
 
 export function commit(scope = 'all') {
   state.meta.updatedAt = Date.now();
-  scheduleSave();
-  pendingScope = scope;
+  // 天气是纯后台缓存：只标 softDirty，遇到其它标签页的用户修改时可以直接让位
+  scheduleSave(scope === 'weather');
   emit(scope);
 }
 
 /** 只落盘、不广播：用于壁纸缓存等纯内部字段，避免触发整页重建 */
 export function persist() {
   state.meta.updatedAt = Date.now();
-  scheduleSave();
+  scheduleSave(true);
 }
 
 /** 修改后提交 */
@@ -465,8 +562,11 @@ export function resetState() {
   flushNow();
 }
 
-/* 关闭页面前确保落盘 */
+/* 关闭页面前确保落盘；只有本标签页真的改过才写，避免旧快照覆盖新数据 */
 window.addEventListener('pagehide', flushNow);
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') flushNow();
 });
+
+// 另一个标签页保存后：空闲且未输入时直接采纳，界面无需刷新
+watchExternalState(handleExternalState);

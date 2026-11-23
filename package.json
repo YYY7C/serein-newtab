@@ -1,0 +1,22 @@
+{
+  "name": "serein-newtab",
+  "version": "1.4.0",
+  "private": true,
+  "description": "Serein 新标签页：零依赖、零构建的 MV3 扩展",
+  "scripts": {
+    "serve": "node tests/server.mjs",
+    "lint": "eslint .",
+    "format": "prettier --write \"tests/**/*.mjs\" \"*.mjs\" \"*.json\" \"package.json\"",
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "package": "pwsh -NoProfile -File scripts/package.ps1"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.10.0",
+    "@eslint/js": "^9.15.0",
+    "@playwright/test": "^1.49.0",
+    "axe-core": "^4.10.0",
+    "eslint": "^9.15.0",
+    "prettier": "^3.3.3"
+  }
+}

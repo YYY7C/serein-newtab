@@ -7,7 +7,7 @@ import { uid, normalizeUrl, isUsableUrl, isSafeImageUrl } from './util.js';
 export const APP = {
   name: 'Serein',
   subtitle: '新标签页',
-  version: '1.3.2',
+  version: '1.4.0',
   schema: 1,
 };
 
@@ -274,6 +274,12 @@ export function createDefaultState() {
       defaultsVersion: DEFAULTS_VERSION,
       createdAt: Date.now(),
       updatedAt: Date.now(),
+      /** 单调递增的写入版本：多标签页并发时用来判断谁更新 */
+      rev: 0,
+      /** 检测到的并发写入次数（仅诊断用） */
+      conflict: 0,
+      /** 首次启动引导是否已完成 */
+      onboarded: false,
       seeded: true,
     },
     config: {
@@ -436,6 +442,17 @@ export function migrate(raw) {
   merged.meta.updatedAt = Number.isFinite(metaUpdated)
     ? Math.min(Date.now(), Math.max(0, metaUpdated))
     : Date.now();
+  const metaRev = toFiniteNumber(merged.meta.rev);
+  merged.meta.rev = Number.isFinite(metaRev) && metaRev >= 0 ? Math.trunc(metaRev) : 0;
+  const metaConflict = toFiniteNumber(merged.meta.conflict);
+  merged.meta.conflict =
+    Number.isFinite(metaConflict) && metaConflict >= 0 ? Math.trunc(metaConflict) : 0;
+  // 老用户升级时不应再看到首启引导；只有全新安装（migrate(null)）才保持 false
+  if (typeof raw.meta?.onboarded !== 'boolean') {
+    merged.meta.onboarded = Boolean(
+      raw.meta || raw.config || (Array.isArray(raw.shortcuts) && raw.shortcuts.length)
+    );
+  }
 
   // 逐版迁移：只在字段还停在「历史默认值」时才升级，避免覆盖用户自己的排版
   if (previousDefaults < DEFAULTS_VERSION) {

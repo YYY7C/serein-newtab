@@ -152,6 +152,7 @@ export function isSafeUrl(url) {
   // 浏览器会忽略 URL 协议里的制表符/换行符，做安全检查前先同样剥掉，
   // 否则 `java\nscript:` 能绕过前缀匹配。
   const normalized = normalizeUrl(url);
+  // eslint-disable-next-line no-control-regex -- 安全检查需要匹配控制字符
   const value = normalized.toLowerCase().replace(/[\u0000-\u0020\u007f]+/g, '');
   if (!value) return false;
   if (/^(javascript|data|vbscript|file):/.test(value)) return false;
@@ -189,6 +190,7 @@ export function isUsableUrl(input) {
 export function isSafeImageUrl(input) {
   const value = String(input ?? '').trim();
   if (!value) return false;
+  // eslint-disable-next-line no-control-regex -- 拒绝带控制字符的图片地址
   if (/[\u0000-\u001f\u007f]/.test(value)) return false;
   if (/^data:/i.test(value)) {
     return /^data:image\/[a-z0-9.+-]+(?:;[^,]*)?,/i.test(value);

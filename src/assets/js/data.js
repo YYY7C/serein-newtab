@@ -4,11 +4,13 @@ import * as store from './store.js';
 import { files, assetUsage, clearLocal, clearChromeMirror, requestPersistentStorage } from './storage.js';
 import { APP } from './defaults.js';
 import { isUsableUrl } from './util.js';
+import { createZip, readZip } from './zip.js';
+
+const ASSET_KEY = /^(?:icon|wallpaper):[\w-]{1,80}$/;
 
 /* --------------------------------------------------------------- 导出 */
 
-function download(filename, text) {
-  const blob = new Blob([text], { type: 'application/json;charset=utf-8' });
+function downloadBlob(filename, blob) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
@@ -16,27 +18,82 @@ function download(filename, text) {
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  // 大文件可能还在写盘：撤销 URL 留出足够时间
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
-export function exportState() {
+/**
+ * 组装完整备份（不触发下载）：WebDAV 同步与自动化测试都复用这一份。
+ * 图片按原样存储（本身已压缩），manifest 走 deflate。
+ */
+export async function buildBackup() {
   const payload = {
-    _format: 'serein-export',
+    _format: 'serein-backup',
     _version: APP.version,
     _exportedAt: new Date().toISOString(),
     state: store.state,
+    assets: [],
   };
+  const entries = [];
+  let index = 0;
+
+  const keys = await files.keys();
+  for (const key of keys) {
+    if (!ASSET_KEY.test(key)) continue;
+    const value = await files.get(key);
+    if (!(value instanceof Blob)) continue;
+    const name = `assets/${index}`;
+    index += 1;
+    entries.push({ name, data: new Uint8Array(await value.arrayBuffer()), store: true });
+    payload.assets.push({ key, name, type: value.type || 'application/octet-stream' });
+  }
+
+  entries.unshift({
+    name: 'manifest.json',
+    data: new TextEncoder().encode(JSON.stringify(payload)),
+  });
+
+  const blob = await createZip(entries);
+  return { blob, payload, assetCount: payload.assets.length };
+}
+
+/** 导出完整备份：manifest.json + IndexedDB 里的壁纸/自定义图标 */
+export async function exportState() {
+  const { blob, assetCount } = await buildBackup();
   const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
-  download(`serein-backup-${stamp}.json`, JSON.stringify(payload, null, 2));
+  downloadBlob(`serein-backup-${stamp}.zip`, blob);
+  return { assetCount, bytes: blob.size };
 }
 
 /* --------------------------------------------------------------- 导入 */
 
-const MAX_IMPORT_BYTES = 8 * 1024 * 1024;
+const MAX_JSON_BYTES = 8 * 1024 * 1024;
+const MAX_ZIP_BYTES = 64 * 1024 * 1024;
+
+/** 校验并清洗快捷方式；不合格的备份直接拒绝，避免误清空现有数据 */
+function sanitizeIncoming(incoming) {
+  if (!incoming || typeof incoming !== 'object') throw new Error('文件结构无法识别');
+  if (!Array.isArray(incoming.shortcuts)) throw new Error('缺少 shortcuts 字段，可能不是 Serein 的备份');
+
+  const shortcuts = incoming.shortcuts.filter(
+    (item) => item && typeof item.url === 'string' && isUsableUrl(item.url)
+  );
+  // 空快捷方式列表本身是合法备份（用户可能删光了）；但「原先有、却全部无效」
+  // 或只有一句空 shortcuts 的文件仍应拒绝，免得误清空数据。
+  if (!shortcuts.length && (incoming.shortcuts.length || (!incoming.meta && !incoming.config))) {
+    throw new Error('备份里没有有效的快捷方式');
+  }
+  return shortcuts;
+}
 
 export async function importState(file) {
-  // 正常备份（不含上传图片）远小于 8 MB；挡住误选的超大文件，避免一次 JSON.parse 卡死新标签页
-  if (file.size > MAX_IMPORT_BYTES) throw new Error('备份文件超过 8 MB，可能不是 Serein 的配置');
+  const isZip = /\.zip$/i.test(file.name || '') || file.type === 'application/zip';
+  return isZip ? importZip(file) : importJson(file);
+}
+
+async function importJson(file) {
+  // 旧版 JSON 备份不含图片；仍然保留兼容，换机后需要重新上传壁纸/图标
+  if (file.size > MAX_JSON_BYTES) throw new Error('备份文件超过 8 MB，可能不是 Serein 的配置');
   // Windows 记事本等编辑器可能给 UTF-8 文件加 BOM，JSON.parse 会因此失败
   const text = (await file.text()).replace(/^\uFEFF/, '');
   let parsed;
@@ -47,20 +104,43 @@ export async function importState(file) {
   }
 
   const incoming = parsed?.state || parsed;
-  if (!incoming || typeof incoming !== 'object') throw new Error('文件结构无法识别');
-  if (!Array.isArray(incoming.shortcuts)) throw new Error('缺少 shortcuts 字段，可能不是 Serein 的备份');
-
-  // 清洗：剔除不安全 URL 和非字符串 URL（后者只会在计数里造成虚高）
-  const shortcuts = incoming.shortcuts.filter(
-    (item) => item && typeof item.url === 'string' && isUsableUrl(item.url)
-  );
-  // 空快捷方式列表本身是合法备份（用户可能删光了）；但「原先有、却全部无效」
-  // 或只有一句空 shortcuts 的文件仍应拒绝，免得误清空数据。
-  if (!shortcuts.length && (incoming.shortcuts.length || (!incoming.meta && !incoming.config))) {
-    throw new Error('备份里没有有效的快捷方式');
-  }
+  const shortcuts = sanitizeIncoming(incoming);
   store.replaceState({ ...incoming, shortcuts });
-  return { count: shortcuts.length };
+  return { count: shortcuts.length, assets: 0, format: 'json' };
+}
+
+async function importZip(file) {
+  if (file.size > MAX_ZIP_BYTES) throw new Error('备份文件超过 64 MB');
+  const entries = await readZip(file);
+  const manifestBytes = entries.get('manifest.json');
+  if (!manifestBytes) throw new Error('备份里缺少 manifest.json');
+
+  let parsed;
+  try {
+    parsed = JSON.parse(new TextDecoder().decode(manifestBytes));
+  } catch {
+    throw new Error('manifest.json 不是合法的 JSON');
+  }
+  if (parsed?._format !== 'serein-backup') throw new Error('不是 Serein 的备份文件');
+
+  const incoming = parsed.state;
+  const shortcuts = sanitizeIncoming(incoming);
+  const assets = Array.isArray(parsed.assets) ? parsed.assets : [];
+
+  // 先写图片再替换状态：任何一张写失败都直接中止，现有数据保持不动
+  let restored = 0;
+  for (const asset of assets) {
+    if (!asset || typeof asset.key !== 'string' || !ASSET_KEY.test(asset.key)) continue;
+    const bytes = entries.get(asset.name);
+    if (!bytes) continue;
+    const blob = new Blob([bytes], { type: typeof asset.type === 'string' ? asset.type : '' });
+    const result = await files.put(asset.key, blob);
+    if (result == null) throw new Error('图片写入失败，可能是存储空间不足');
+    restored += 1;
+  }
+
+  store.replaceState({ ...incoming, shortcuts });
+  return { count: shortcuts.length, assets: restored, format: 'zip' };
 }
 
 /* --------------------------------------------------------------- 重置 */
