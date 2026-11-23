@@ -29,25 +29,25 @@ Serein 的做法是把上面几件事一次做对：
 
 ## 二、预览
 
+> 下面所有截图用的是同一张必应每日一图当壁纸（「冰下秘境」，加拿大亚伯拉罕湖，© Guang Cao/Getty Images），方便横向比较六套风格对同一张照片的处理差异。
+
 **六套视觉风格** —— 每套都是完整的表层语言替换（色彩、表面材质、版面网格、图标呈现），不只是换一个颜色。
 
 | 轻玻璃 · 网格 | 暗色材质 · 网格 |
 |---|---|
-| ![轻玻璃：渐变壁纸 + 毛玻璃](docs/screenshots/01-hero.webp) | ![暗色材质：纯色深底 + 上打光](docs/screenshots/02-style-noir.webp) |
+| ![轻玻璃：照片壁纸透出 + 毛玻璃面板](docs/screenshots/01-hero.webp) | ![暗色材质：整张照片压暗去饱和 + 上打光](docs/screenshots/02-style-noir.webp) |
 | **白纸 · 网格** | **原色 · 网格** |
-| ![白纸：暖白纸面 + 衬线数字](docs/screenshots/03-style-paper.webp) | ![原色：壁纸原样呈现 + 圆形品牌图标](docs/screenshots/04-style-native.webp) |
+| ![白纸：暖白遮罩把照片压成纸面 + 衬线数字](docs/screenshots/03-style-paper.webp) | ![原色：照片原样呈现 + 圆形品牌图标](docs/screenshots/04-style-native.webp) |
 | **编辑排版 · 列表** | **终端 · 列表** |
 | ![编辑排版：纸色底 + 编号文字目录](docs/screenshots/05-style-editorial.webp) | ![终端：等宽字体 + 编号行](docs/screenshots/06-style-terminal.webp) |
-
-**壁纸** —— 渐变预设、必应每日一图、图片链接、本地上传、纯色都可以；换必应后右上角直接有「换一张壁纸」，还能回看最近 8 天。
-
-![必应每日壁纸：西班牙坎塔布里亚的圣胡斯塔隐修院，毛玻璃面板浮在照片上](docs/screenshots/10-bing.webp)
 
 | 设置面板（外观） | 文件夹 |
 |---|---|
 | ![设置面板：视觉风格、强调色、毛玻璃与圆角](docs/screenshots/07-settings.webp) | ![文件夹：2×2 缩略预览，拖入拖出](docs/screenshots/08-folder.webp) |
 
 ![右键菜单：打开、编辑、移动到文件夹、新建文件夹并移入、删除](docs/screenshots/09-menu.webp)
+
+壁纸来源有渐变预设、必应每日一图、图片链接、本地上传和纯色；用必应时右上角会多出「换一张壁纸」，壁纸页还能回看最近 8 天的每日一图。
 
 ---
 
