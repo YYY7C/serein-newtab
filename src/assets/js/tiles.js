@@ -856,6 +856,7 @@ async function openFolder(groupId) {
         class: 'btn is-ghost',
         type: 'button',
         text: '重命名',
+        style: { marginRight: 'auto' },
         onclick: async () => {
           const title = await promptDialog({
             title: '重命名文件夹',
@@ -871,7 +872,6 @@ async function openFolder(groupId) {
           modal.card.setAttribute('aria-label', finalTitle);
         },
       }),
-      h('span', { style: { flex: '1' } }),
       h('button', { class: 'btn is-primary', type: 'button', text: '完成', onclick: () => modal.close() }),
     ],
   });

@@ -7,7 +7,7 @@ import { uid, normalizeUrl, isUsableUrl, isSafeImageUrl } from './util.js';
 export const APP = {
   name: 'Serein',
   subtitle: '新标签页',
-  version: '1.3.1',
+  version: '1.3.2',
   schema: 1,
 };
 
