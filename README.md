@@ -121,6 +121,14 @@ Serein 的做法是把上面几件事一次做对：
 第一次打开会自动生成 11 个常用站点 + 1 个「工具」文件夹，直接可用。
 按 `F2` 或右键任意图标就能改成你自己的。
 
+### 上架到扩展商店
+
+打包：`powershell -ExecutionPolicy Bypass -File scripts/package.ps1` → `dist/serein-newtab-v<版本>.zip`。
+
+- 两个商店的注册、上传、隐私表单与审核注意事项：[docs/publishing.md](docs/publishing.md)
+- 商品页文案、权限理由、单一用途声明：[docs/store-listing.md](docs/store-listing.md)
+- 商店素材（1280×800 截图、440×280 / 1400×560 宣传图、300×300 logo）：[docs/store/](docs/store)
+
 ---
 
 ## 五、快捷键
@@ -173,6 +181,8 @@ Serein 的做法是把上面几件事一次做对：
 
 搜索联想可以在设置里关掉；城市搜索只在你打开城市选择器并输入关键词时请求。所有域名在 `manifest.json` 的 `host_permissions` 里显式列出，没有 `<all_urls>`。
 
+需要对外引用（例如提交到扩展商店）时，用 [PRIVACY.md](PRIVACY.md)：内容与本段一致，含中英双语。
+
 ---
 
 ## 七、目录结构
@@ -211,6 +221,15 @@ src/
 │       ├── settings.js         设置面板（8 个分区）
 │       ├── data.js             导入 / 导出 / 重置 / 用量
 │       └── background.js       Service Worker（工具栏图标点击）
+
+docs/
+├── screenshots/                README 用的预览图
+├── store/                      商店素材：截图、宣传图、logo
+├── publishing.md               上架流程（Chrome Web Store / Edge Add-ons）
+└── store-listing.md            商店文案与权限理由
+
+scripts/package.ps1             打包上传用的 zip（产物在 dist/，不入库）
+PRIVACY.md                      隐私政策（商店要求填写的链接）
 ```
 
 ---
