@@ -754,11 +754,11 @@ function openPanel() {
 /** 下拉不能长出视口：按搜索框下方的真实空间收紧高度，太矮时改为面板内滚动 */
 function fitPanelHeight() {
   if (!els?.suggest) return;
-  // 面板锚定在 .search-wrap 下方（含提示行的占位），与 CSS 的 top: calc(100% + 8px) 对齐
-  const wrapRect = els.wrap.getBoundingClientRect();
+  // 面板是 .search 的子元素，与 CSS 的 top: calc(100% + 8px) 对齐
+  const formRect = els.form.getBoundingClientRect();
   const viewport = window.visualViewport;
   const viewportBottom = viewport ? viewport.height + viewport.offsetTop : window.innerHeight;
-  const top = wrapRect.bottom + 8;
+  const top = formRect.bottom + 8;
   const available = Math.floor(viewportBottom - top - 12);
   els.suggest.style.maxHeight = `${Math.min(440, Math.max(168, available))}px`;
 }

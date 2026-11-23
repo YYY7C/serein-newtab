@@ -155,8 +155,8 @@ function setGradientFallback(bg) {
 
 /** 每种风格的默认遮罩强度（%）：材质/纸面型风格要靠它压住壁纸，保证表面干净；
  *  原色与玻璃则完全不压。设置页可逐风格覆盖，值存在 background.veilByStyle。
- *  白纸只压到 75%，保留约 1/4 的壁纸，做成一层暖灰纸纹而不是一片白。 */
-export const STYLE_VEIL = { glass: 0, native: 0, noir: 80, paper: 75, editorial: 93, terminal: 94 };
+ *  材质型统一压到 45%：既保留一半壁纸，又不会让图标和文字糊在照片上。 */
+export const STYLE_VEIL = { glass: 0, native: 0, noir: 45, paper: 45, editorial: 93, terminal: 94 };
 
 /** 当前风格实际生效的遮罩强度（0–100）：用户覆盖优先，否则用该风格的预设值 */
 export function styleVeilPercent(bg, style) {

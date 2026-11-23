@@ -8,7 +8,7 @@ Serein 是零构建的静态 MV3 扩展，**上传的就是 `src/` 目录本身*
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\package.ps1
-# -> dist/serein-newtab-v1.3.0.zip
+# -> dist/serein-newtab-v1.3.1.zip
 ```
 
 脚本做三件事：把 `src/` 里所有文件按 `manifest.json` + `assets/` 的层级放进 zip 根目录、路径统一用 `/`、文件名带版本号。
@@ -16,7 +16,7 @@ powershell -ExecutionPolicy Bypass -File scripts\package.ps1
 上传前的自检：
 
 - `manifest.json` 在 zip **根目录**（不是 `src/manifest.json`）
-- 每次提交都递增 `manifest.json` 的 `version`（`1.3.0` → `1.3.1`）
+- 每次提交都递增 `manifest.json` 的 `version`（`1.3.1` → `1.3.2`）
 - zip 里不带 `docs/`、`README.md`、`.git/`、`dist/`
 - 图标 `assets/img/icon-128.png` 存在（商店图标直接取 manifest 里的这一张）
 
@@ -36,7 +36,7 @@ powershell -ExecutionPolicy Bypass -File scripts\package.ps1
 ### 1.2 上传
 
 1. 点 **Add new item**
-2. 选 `dist/serein-newtab-v1.3.0.zip` → **Upload**
+2. 选 `dist/serein-newtab-v1.3.1.zip` → **Upload**
 3. manifest 或 zip 结构有问题会当场报错（最常见：zip 里多了 `src/` 一层）
 
 ### 1.3 填写商品页（Store listing）

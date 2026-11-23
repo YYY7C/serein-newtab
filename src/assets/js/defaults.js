@@ -7,17 +7,18 @@ import { uid, normalizeUrl, isUsableUrl, isSafeImageUrl } from './util.js';
 export const APP = {
   name: 'Serein',
   subtitle: '新标签页',
-  version: '1.3.0',
+  version: '1.3.1',
   schema: 1,
 };
 
 /**
- * 布局默认值版本。只在「默认网格」发生需要迁移的变化时 +1：
+ * 默认值版本。默认网格或默认遮罩强度发生需要迁移的变化时 +1：
  * v2 把默认图标从 60px 放大到 72px、间距从 20px 放宽到 28px；
  * v3 把默认间距再从 28px 放宽到 36px，缓解图标之间的拥挤感；
- * v4 把默认间距从 36px 放宽到 48px，不再要求列数/图标大小也停在旧默认值。
+ * v4 把默认间距从 36px 放宽到 48px，不再要求列数/图标大小也停在旧默认值；
+ * v5 把材质型风格（暗色 / 白纸）的默认遮罩从 80% / 75% 调到 45%。
  */
-const GRID_DEFAULTS_VERSION = 4;
+const DEFAULTS_VERSION = 5;
 
 /** 历史出现过的默认间距：迁移时只要还停在这些值上，就说明用户没自己调过 */
 const LEGACY_GAPS = new Set([20, 28, 36]);
@@ -270,7 +271,7 @@ export function createDefaultState() {
   return {
     meta: {
       schema: APP.schema,
-      defaultsVersion: GRID_DEFAULTS_VERSION,
+      defaultsVersion: DEFAULTS_VERSION,
       createdAt: Date.now(),
       updatedAt: Date.now(),
       seeded: true,
@@ -437,7 +438,7 @@ export function migrate(raw) {
     : Date.now();
 
   // 逐版迁移：只在字段还停在「历史默认值」时才升级，避免覆盖用户自己的排版
-  if (previousDefaults < GRID_DEFAULTS_VERSION) {
+  if (previousDefaults < DEFAULTS_VERSION) {
     const layout = merged.config?.layout;
     // v2：图标 60 → 72（整张网格还是旧默认布局时才动）
     if (previousDefaults < 2 && layout && layout.columns === 6 && layout.iconSize === 60) {
@@ -450,7 +451,7 @@ export function migrate(raw) {
       layout.gap = DEFAULT_GAP;
     }
   }
-  merged.meta.defaultsVersion = Math.max(previousDefaults, GRID_DEFAULTS_VERSION);
+  merged.meta.defaultsVersion = Math.max(previousDefaults, DEFAULTS_VERSION);
 
   const seenGroupIds = new Set();
   merged.groups = (Array.isArray(merged.groups) ? merged.groups : [])
@@ -624,6 +625,11 @@ export function migrate(raw) {
     }
     if (!Object.keys(map).length && Number.isFinite(legacyVeil) && legacyVeil > 0) {
       map[merged.config.style] = Math.min(100, Math.max(0, Math.round(legacyVeil)));
+    }
+    // v5：材质型风格换了默认值，同时清掉已保存的逐风格覆盖，让 45% 立即生效
+    if (previousDefaults < 5) {
+      delete map.noir;
+      delete map.paper;
     }
     merged.config.background.veilByStyle = map;
     delete merged.config.background.veil;

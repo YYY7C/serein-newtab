@@ -199,7 +199,14 @@ html[data-style='noir'] .tile:hover .tile-icon.is-brand .tile-img {
 
 html[data-style='noir'] .tile-label {
   font-size: 11.5px;
+  /* 遮罩降到 45% 后壁纸更亮：标签要抬一档亮度并带阴影，避免在浅色照片上消失 */
+  color: rgba(255, 255, 255, 0.8);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7), 0 0 12px rgba(0, 0, 0, 0.45);
+}
+
+html[data-style='noir'] .tile--add .tile-label {
   color: var(--fg-3);
+  text-shadow: none;
 }
 
 html[data-style='noir'] .folder-mini > span {
@@ -231,13 +238,16 @@ html[data-style='noir'] .clock-time {
 html[data-style='noir'] .greeting {
   font-size: 11px;
   letter-spacing: 0.2em;
-  color: var(--fg-3);
+  /* 45% 遮罩下浅色壁纸会透出来：浮在照片上的字补阴影，卡片内部不动 */
+  color: rgba(255, 255, 255, 0.8);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7), 0 0 12px rgba(0, 0, 0, 0.45);
 }
 
 html[data-style='noir'] .dateline {
   font-size: 12px;
   letter-spacing: 0.05em;
-  color: var(--fg-3);
+  color: rgba(255, 255, 255, 0.8);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7), 0 0 12px rgba(0, 0, 0, 0.45);
 }
 
 html[data-style='noir'] .festival {
@@ -302,10 +312,10 @@ html[data-style='paper'] {
     'Noto Serif SC', Georgia, serif;
 }
 
-/* 壁纸作为暖灰纸纹存在：遮罩压到 75%，JS 再把 .bg-media 褪色到 45%，
+/* 壁纸作为暖灰纸纹存在：遮罩压到 45%，JS 再把 .bg-media 褪色到 45%，
    仍能看清画面轮廓 */
 /* 不要对整个 .bg 去饱和：那会把遮罩层的暖色一起洗成中性灰。
-   纸面的暖意来自 --veil-rgb，壁纸透出约 1/4。 */
+   纸面的暖意来自 --veil-rgb，壁纸约透出一半。 */
 html[data-style='paper'] .bg {
   filter: contrast(0.97) brightness(1.02);
 }

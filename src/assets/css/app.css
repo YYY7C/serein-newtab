@@ -335,6 +335,7 @@ html[data-tone='light'] .clock {
 }
 
 .search {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 2px;
@@ -526,7 +527,8 @@ html[data-tone='light'] .clock {
   transform: scale(0.92);
 }
 
-/* 搜索下拉 */
+/* 搜索下拉：锚在 .search 药丸本身下方，不跟随后面的提示行占位，
+   否则提示行虽然隐藏仍会撑出一段空白，把面板推离搜索框。 */
 
 .suggest {
   position: absolute;
