@@ -265,7 +265,7 @@ function boot() {
     showToast({ text: t('检测到本地缓存被清理，已从镜像恢复你的配置') });
   });
 
-  if (!sessionStorage.getItem('serein:greeted')) {
+  if (!skipOnboarding && !sessionStorage.getItem('serein:greeted')) {
     sessionStorage.setItem('serein:greeted', '1');
     setTimeout(() => showToast({ text: t('右键图标或空白处，随时编辑') }), 900);
   }

@@ -2,6 +2,7 @@
   "name": "serein-newtab",
   "version": "1.6.0",
   "private": true,
+  "license": "CC-BY-NC-SA-4.0",
   "description": "Serein 新标签页：零依赖、零构建的 MV3 扩展",
   "scripts": {
     "serve": "node tests/server.mjs",

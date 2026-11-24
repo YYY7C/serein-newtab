@@ -492,6 +492,8 @@ export const EN = {
   域名: 'Domain',
   用途: 'Purpose',
   许可与致谢: 'Licenses & credits',
+  '本项目以 CC BY-NC-SA 4.0 发布：禁止商业使用；二次开发须以相同许可分发并保留署名。':
+    'This project is licensed under CC BY-NC-SA 4.0: commercial use is prohibited; derivative works must be distributed under the same license with attribution.',
   '本扩展为净室实现，未包含任何 GPL / AGPL 项目的代码。':
     'This extension is a clean-room implementation and includes no code from GPL / AGPL projects.',
   '天气数据由 ': 'Weather data by ',
@@ -499,8 +501,8 @@ export const EN = {
     ' (the free tier is for non-commercial use only); the daily wallpaper comes from ',
   ' 公开接口，版权归原作者，仅用于个人桌面欣赏。':
     "'s public API. All rights remain with the original authors; for personal desktop viewing only.",
-  '如果你想商用：请替换天气源为 QWeather 等服务，并把壁纸改为完全自有的素材。':
-    'For commercial use, replace the weather source with a service such as QWeather and use fully owned wallpaper assets.',
+  '第三方数据与素材仍受各自许可约束；品牌标识不随本项目许可授权。':
+    'Third-party data and assets remain subject to their own licenses; brand logos are excluded from this project’s license.',
   聚焦搜索框: 'Focus the search box',
   '聚焦搜索框（非输入状态）': 'Focus the search box (when not typing)',
   '关闭浮层 / 收起联想（搜索框里再按一次清空）':

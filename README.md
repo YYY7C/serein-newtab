@@ -256,7 +256,7 @@ tests/                          Playwright 测试（83 条：启动/搜索/文�
 scripts/package.ps1             打包发布用的 zip（产物在 dist/，不入库）
 .github/workflows/ci.yml        lint + 测试 + 打包
 .github/workflows/release.yml   打 tag 时生成 GitHub Release
-LICENSE                         MIT（品牌图标除外，见 assets/brand/NOTICE.md）
+LICENSE                         CC BY-NC-SA 4.0（非商业；品牌图标除外，见 assets/brand/NOTICE.md）
 CONTRIBUTING.md                 开发、测试与提交约定
 CHANGELOG.md                    版本记录
 PRIVACY.md                      隐私政策
@@ -347,7 +347,13 @@ CI 会跑 lint + 83 条 Playwright 测试 + 打包，详细覆盖范围见 [CONT
 
 ## 十、许可
 
-代码以 [MIT](LICENSE) 许可发布。`src/assets/brand/` 下的品牌标识归各自所有者，不随 MIT 授权，详见 [assets/brand/NOTICE.md](src/assets/brand/NOTICE.md)。
+本项目以 [CC BY-NC-SA 4.0](LICENSE)（知识共享 署名-非商业性使用-相同方式共享 4.0 国际）发布：
+
+- **禁止商业使用**：不得将本项目或其衍生作品用于商业目的；「非商业」沿用 CC 官方定义，即不以商业利益或金钱报酬为主要目的。
+- **二次开发须沿用同一许可**：修改、分发或基于本项目创作衍生作品时，必须保留署名，并以 CC BY-NC-SA 4.0 或兼容许可分发，不得改为更宽松的许可。
+- 因此本仓库属于 **source-available（源码可见）**，不是 OSI 定义的开源项目。完整法律文本以 [LICENSE](LICENSE) 内的官方英文原文为准。
+
+例外：`src/assets/brand/` 下的品牌标识归各自所有者，不随本许可授权，详见 [assets/brand/NOTICE.md](src/assets/brand/NOTICE.md)。城市索引数据来自 [GeoNames](https://www.geonames.org/)（CC BY 4.0），仍适用其原始许可；开发与测试依赖不随扩展分发，适用各自许可证。
 
 本项目为净室实现，未包含任何 GPL / AGPL 项目的代码。
-天气数据由 [Open-Meteo](https://open-meteo.com/) 提供；城市索引数据来自 [GeoNames](https://www.geonames.org/)（CC BY 4.0）；每日壁纸来自必应公开接口，版权归原作者。
+天气数据由 [Open-Meteo](https://open-meteo.com/) 提供；每日壁纸来自必应公开接口，版权归原作者。

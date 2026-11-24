@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### 变更
+
+- 许可证从 MIT 改为 CC BY-NC-SA 4.0：禁止商业使用，二次开发与分发须沿用同一许可并保留署名；仓库自此为 source-available，而非 OSI 定义的开源项目
+- `package.json` 增加 SPDX 标识 `CC-BY-NC-SA-4.0`；README、CONTRIBUTING 与设置页「许可与致谢」同步许可说明
+
 ### 计划中
 
 - 多标签页并发写入的按实体合并（当前为最后编辑者胜）
