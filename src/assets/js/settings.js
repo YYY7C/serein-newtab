@@ -2581,5 +2581,3 @@ const BUILDERS = {
   data: buildData,
   about: buildAbout,
 };
-
-export const isSettingsOpen = () => isOpen;

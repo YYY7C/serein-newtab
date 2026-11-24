@@ -11,8 +11,6 @@
 
 import { EN } from './locales/en.js';
 
-export const SUPPORTED_LOCALES = ['zh-CN', 'en'];
-
 /** 语言偏好：auto 跟随浏览器，其余为明确选择 */
 export const LANGUAGE_PREFERENCES = ['auto', 'zh-CN', 'en'];
 
@@ -43,7 +41,6 @@ export function resolveLocale(preference = 'auto') {
   return langs.some((lang) => ZH_LANGUAGE.test(lang)) ? 'zh-CN' : 'en';
 }
 
-export const getLocale = () => current;
 export const isEnglish = () => current === 'en';
 /** 与当前语言匹配的 Intl 区域标签 */
 export const intlLocale = () => (current === 'en' ? 'en-US' : 'zh-CN');
@@ -90,7 +87,6 @@ export const plural = (count, one, other) => (Math.abs(Number(count)) === 1 ? on
 
 /** 仅用于测试/诊断：当前语言下所有缺失的英文词条 */
 export const missingI18nKeys = () => [...missing];
-export const clearMissingI18nKeys = () => missing.clear();
 
 export function onLocaleChange(fn) {
   listeners.add(fn);
@@ -130,22 +126,6 @@ export function formatDate(date, options) {
   } catch {
     return String(date);
   }
-}
-
-export function formatNumber(value, options) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return String(value);
-  try {
-    return new Intl.NumberFormat(intlLocale(), options).format(number);
-  } catch {
-    return String(number);
-  }
-}
-
-/** 英文展示用：中文城市名到英文名的兜底查找由 city-search.js 负责 */
-export function pickLocalized(locale, zh, en) {
-  if (locale === 'en') return en || zh || '';
-  return zh || en || '';
 }
 
 // 模块加载时先按浏览器语言落一次，保证 SSR/首个同步渲染也有正确方向。

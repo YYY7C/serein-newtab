@@ -173,6 +173,3 @@ export function syncDensity(state) {
   }
   return root.dataset.density;
 }
-
-/** 列表型风格：图标以「编号 + 名称 + 域名」的文本行呈现 */
-export const isListStyle = (id) => id === 'editorial' || id === 'terminal';

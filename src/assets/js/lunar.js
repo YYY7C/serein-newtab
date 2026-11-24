@@ -171,12 +171,6 @@ export function lunarMonthText(month, isLeap) {
   return (isLeap ? '闰' : '') + MONTH_NAMES[month - 1] + '月';
 }
 
-/** 只显示「初一」式的日期，特殊日子显示名号 */
-export function lunarDayLabel(day) {
-  if (day === 1) return '初一';
-  return lunarDayText(day);
-}
-
 /* ---------------------------------------------------------------- 节日 */
 
 const SOLAR_FESTIVALS = {
@@ -250,6 +244,3 @@ export function describeDate(date = new Date()) {
     dayText: dayLabel,
   };
 }
-
-export const WEEKDAYS = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
-export const WEEKDAYS_SHORT = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];

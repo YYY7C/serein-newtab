@@ -516,11 +516,6 @@ async function applyTone(bg, known) {
   root.dataset.tone = tone;
 }
 
-/* --------------------------------------------------------------- 主题色 */
-
-export function applyAccent(hex) {
-  const root = document.documentElement;
-  root.style.setProperty('--accent', hex || '#6c8cff');
-}
+/* --------------------------------------------------------------- 颜色工具 */
 
 export { isLightColor };

@@ -93,10 +93,6 @@ export function debounce(fn, ms = 200) {
   return wrapped;
 }
 
-export function raf2(fn) {
-  requestAnimationFrame(() => requestAnimationFrame(fn));
-}
-
 /* --------------------------------------------------------------- 数值 */
 
 export const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
@@ -118,18 +114,6 @@ export function relativeTime(ts) {
 }
 
 /* --------------------------------------------------------------- 字符串 */
-
-export function escapeHtml(input) {
-  return String(input).replace(/[&<>"']/g, (c) => {
-    switch (c) {
-      case '&': return '&amp;';
-      case '<': return '&lt;';
-      case '>': return '&gt;';
-      case '"': return '&quot;';
-      default: return '&#39;';
-    }
-  });
-}
 
 const SCHEME_RE = /^[a-z][a-z0-9+.-]*:/i;
 // 冒号后必须是端口数字：否则 `com.app://custom` 会被误当成域名补成 https。
@@ -302,11 +286,6 @@ export function hexToRgb(hex) {
   return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
 }
 
-export function withAlpha(hex, alpha) {
-  const { r, g, b } = hexToRgb(hex);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
-
 /* --------------------------------------------------------- 内联图标 */
 
 /* 24x24 线性图标，手绘路径，描边统一走 currentColor */
@@ -360,12 +339,4 @@ export function svgIcon(name, size = 20, extraClass = '') {
     `stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" ` +
     `aria-hidden="true" focusable="false">${body}</svg>`
   );
-}
-
-/** 返回真实 SVG 元素，方便和其他 DOM 组合 */
-export function iconEl(name, size = 20, extraClass = '') {
-  const wrap = document.createElement('span');
-  wrap.className = 'ico-wrap';
-  wrap.innerHTML = svgIcon(name, size, extraClass);
-  return wrap.firstElementChild;
 }

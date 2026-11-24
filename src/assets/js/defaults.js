@@ -230,9 +230,6 @@ const CUSTOM_ENGINE_COLORS = [
   '#f97316', '#f59e0b', '#22c55e', '#14b8a6', '#0ea5e9',
 ];
 
-/** 内置引擎 id 固定，导入的备份不能借此覆盖内置项 */
-export const isBuiltinEngine = (id) => ENGINES.some((engine) => engine.id === id);
-
 export const customEngines = (config) =>
   Array.isArray(config?.search?.engines) ? config.search.engines : [];
 

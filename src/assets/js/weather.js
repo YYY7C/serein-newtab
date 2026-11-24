@@ -133,11 +133,6 @@ function svgFor(kind, isDay) {
   }
 }
 
-export function weatherIconMarkup(code, isDay = true, size = 24) {
-  const kind = weatherKind(code);
-  return svgFor(kind, isDay).replace('<svg ', `<svg width="${size}" height="${size}" class="weather-glyph" `);
-}
-
 export function weatherIconInline(code, isDay = true, size = 22) {
   const kind = weatherKind(code);
   return svgFor(kind, isDay)

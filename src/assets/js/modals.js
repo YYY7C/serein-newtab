@@ -6,7 +6,6 @@
 import { h, svgIcon, clear, uid, normalizeUrl, isUsableUrl } from './util.js';
 import { files, revokeObjectUrl } from './storage.js';
 import { resolveIcon, faviconUrl, loadFileIcon } from './icons.js';
-import { ENGINES, engineName } from './defaults.js';
 import * as store from './store.js';
 import { t } from './i18n.js';
 
@@ -773,16 +772,6 @@ export function shortcutEditor({ shortcut = null, groups = [], defaultGroupId = 
       (shortcut ? titleInput : urlInput).focus();
     }, 80);
   });
-}
-
-/* ------------------------------------------------------- 搜索引擎选择器 */
-
-export function enginePicker(currentId, onPick) {
-  return ENGINES.map((engine) => ({
-    label: engineName(engine),
-    icon: currentId === engine.id ? 'check' : undefined,
-    onClick: () => onPick(engine.id),
-  }));
 }
 
 /* --------------------------------------------------------- 通用表单元素 */

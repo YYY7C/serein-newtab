@@ -454,11 +454,6 @@ export function revokeObjectUrl(url) {
   }
 }
 
-export function revokeAllObjectUrls() {
-  objectUrls.forEach((url) => URL.revokeObjectURL(url));
-  objectUrls.clear();
-}
-
 /** 请求浏览器不要回收本站点数据（壁纸/图标很占空间时很关键） */
 export async function requestPersistentStorage() {
   try {
@@ -467,14 +462,5 @@ export async function requestPersistentStorage() {
     return await navigator.storage.persist();
   } catch {
     return false;
-  }
-}
-
-export async function storageEstimate() {
-  try {
-    const estimate = await navigator.storage?.estimate?.();
-    return estimate || { usage: 0, quota: 0 };
-  } catch {
-    return { usage: 0, quota: 0 };
   }
 }

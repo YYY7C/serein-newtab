@@ -9,7 +9,7 @@
  * 徽标不是妥协——它是「图片加载失败/离线」时的确定性美学保底。
  */
 
-import { domainPalette, hostOf, normalizeUrl, hashString, hexToRgb, isSafeImageUrl } from './util.js';
+import { domainPalette, hostOf, normalizeUrl, hexToRgb, isSafeImageUrl } from './util.js';
 import { brandLogoUrl, brandSlugFor } from './brands.js';
 import { isEnglish } from './i18n.js';
 
@@ -415,19 +415,4 @@ export function previewFileIcon(fileId) {
   return previewFileIconCache.get(fileId);
 }
 
-/** 给缩略图预览用：返回一个稳定的小尺寸 favicon 地址 */
-export function previewFavicon(url) {
-  return faviconUrl(url, 64);
-}
-
 export { brandSlugFor, brandLogoUrl };
-
-export function brandColorFor(url, title) {
-  const host = hostOf(url);
-  const brand = matchBrand(host);
-  return brand ? brand[0] : domainPalette(host || title || 'serein').solid;
-}
-
-export function stableHue(seed) {
-  return hashString(String(seed || '')) % 360;
-}

@@ -7,10 +7,16 @@ test-results/
 playwright-report/
 blob-report/
 
-# 本地预览与截图（我调试 UI 时会临时生成）
+# 本地预览与截图（调试 UI 时会临时生成）
 .shots/
 .tmp-*
 *.local.*
+
+# 发布操作与个人规划文档：只保留在本地，不入库
+docs/publishing.md
+docs/store-listing.md
+docs/roadmap.md
+docs/store/
 
 # 日志
 *.log

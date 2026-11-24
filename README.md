@@ -134,14 +134,9 @@ Serein 的做法是把上面几件事一次做对：
 第一次打开会自动生成 11 个常用站点 + 1 个「工具」文件夹，直接可用。
 按 `F2` 或右键任意图标就能改成你自己的。
 
-### 上架到扩展商店
+### 打包
 
-打包：`powershell -ExecutionPolicy Bypass -File scripts/package.ps1` → `dist/serein-newtab-v<版本>.zip`。
-
-- 两个商店的注册、上传、隐私表单与审核注意事项：[docs/publishing.md](docs/publishing.md)
-- 商品页文案、权限理由、单一用途声明：[docs/store-listing.md](docs/store-listing.md)
-- 未完成功能、已知限制与待补测试：[docs/roadmap.md](docs/roadmap.md)
-- 商店素材（1280×800 截图、440×280 / 1400×560 宣传图、300×300 logo）：[docs/store/](docs/store)
+`npm run package` → `dist/serein-newtab-v<版本>.zip`（产物不入库，可用于本地分发或 GitHub Release）。
 
 ---
 
@@ -205,7 +200,7 @@ Serein 的做法是把上面几件事一次做对：
 
 搜索联想可以在设置里关掉；关闭后不会请求任何联想接口。最近搜索只写在 `localStorage` 里，可以随时在设置中关闭记录或清除。城市搜索优先使用随扩展打包的 GeoNames 中文城市库（CC BY 4.0），本地命中时不发请求；只有本地没有结果、且输入是英文/拼音时才请求 `geocoding-api.open-meteo.com`。所有域名在 `manifest.json` 的 `host_permissions` 里显式列出，没有 `<all_urls>`。
 
-需要对外引用（例如提交到扩展商店）时，用 [PRIVACY.md](PRIVACY.md)：内容与本段一致，含中英双语。
+需要对外分发或引用隐私说明时，用 [PRIVACY.md](PRIVACY.md)：内容与本段一致，含中英双语。
 
 ---
 
@@ -255,20 +250,16 @@ src/
 │       └── background.js       Service Worker（工具栏图标点击）
 
 docs/
-├── screenshots/                README 用的预览图
-├── store/                      商店素材：截图、宣传图、logo
-├── publishing.md               上架流程（Chrome Web Store / Edge Add-ons）
-├── store-listing.md            商店文案与权限理由
-└── roadmap.md                  未完成功能、已知限制与待补测试
+└── screenshots/                README 用的预览图
 
 tests/                          Playwright 测试（83 条：启动/搜索/文件夹/设置/风格/多标签页/备份/命令面板/字体/主题/壁纸池/新小组件/城市搜索/侧栏布局/英文界面/可访问性）
-scripts/package.ps1             打包上传用的 zip（产物在 dist/，不入库）
+scripts/package.ps1             打包发布用的 zip（产物在 dist/，不入库）
 .github/workflows/ci.yml        lint + 测试 + 打包
-.github/workflows/release.yml  打 tag 时生成 GitHub Release
+.github/workflows/release.yml   打 tag 时生成 GitHub Release
 LICENSE                         MIT（品牌图标除外，见 assets/brand/NOTICE.md）
 CONTRIBUTING.md                 开发、测试与提交约定
 CHANGELOG.md                    版本记录
-PRIVACY.md                      隐私政策（商店要求填写的链接）
+PRIVACY.md                      隐私政策
 ```
 
 ---
@@ -286,7 +277,7 @@ $env:PW_CHANNEL = 'msedge'   # 本地复用系统 Edge，避免下载 Chromium
 npm test
 ```
 
-CI 会跑 lint + 83 条 Playwright 测试 + 打包，详细覆盖范围见 CONTRIBUTING.md 与 [docs/roadmap.md](docs/roadmap.md)。
+CI 会跑 lint + 83 条 Playwright 测试 + 打包，详细覆盖范围见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 | 想改什么 | 改哪里 |
 |---|---|
@@ -346,7 +337,7 @@ CI 会跑 lint + 83 条 Playwright 测试 + 打包，详细覆盖范围见 CONTR
 3. **必应壁纸版权** —— 来自必应公开接口，其 JSON 自带「此图片不能下载用作壁纸」声明，仅供个人桌面欣赏。要商用请换成自有素材。
 4. **Open-Meteo 免费层禁商用** —— 商用需替换为 QWeather 等服务。
 5. **无痕窗口无法覆盖新标签页** —— Chrome 平台限制，任何扩展都做不到。
-6. **设置里的搜索只影响本页跳转** —— 绝不修改浏览器默认搜索引擎（那会触发应用商店额外审核）。
+6. **设置里的搜索只影响本页跳转** —— 绝不修改浏览器默认搜索引擎。
 7. **依赖 `color-mix()`** —— 需要 Chrome/Edge 116 及以上（`manifest.json` 已声明 `minimum_chrome_version`）。
 8. **刷新/异常退出可能留下旧图标文件** —— 删除/替换上传图标后会等 6 秒撤销窗口结束再回收；如果在这 6 秒内刷新、崩溃或强杀浏览器，IndexedDB 里可能留下未被引用的旧文件（点「恢复默认设置」会在清空配置时一并清理）。
 9. **多标签页是「最后编辑者胜」** —— 空闲标签页不会覆盖新数据，其它标签页的写入也会即时同步；但两个标签页同时修改同一项时，后写入的那次会覆盖前一次，不做按实体的自动合并。
