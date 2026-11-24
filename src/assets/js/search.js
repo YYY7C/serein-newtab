@@ -20,11 +20,14 @@ import {
 import {
   enginesFor,
   engineById,
+  engineName,
+  engineLetter,
   RECENT_SEARCH_LIMIT,
   RECENT_SEARCH_MAX_LENGTH,
 } from './defaults.js';
 import * as store from './store.js';
 import { openMenu, closeMenu, isMenuOpen } from './menu.js';
+import { t } from './i18n.js';
 import { resolveIcon, brandSlugFor, brandLogoUrl, previewFileIcon, isFaviconPlaceholder } from './icons.js';
 import {
   addTodo,
@@ -146,7 +149,11 @@ const COMMANDS = [
 function matchCommands(query) {
   const lower = query.toLowerCase();
   return COMMANDS.filter(
-    (command) => command.label.toLowerCase().includes(lower) || command.keywords.includes(lower)
+    (command) =>
+      command.label.toLowerCase().includes(lower) ||
+      command.keywords.includes(lower) ||
+      // 英文界面下按翻译后的标签匹配；中文关键词始终保留
+      t(command.label).toLowerCase().includes(lower)
   ).slice(0, 3);
 }
 
@@ -257,12 +264,12 @@ async function startQuickCommand(prefix, permissionKind = '') {
     return;
   }
   if (!hasPermissionApi()) {
-    bus.emit('toast', { text: '标签页 / 书签 / 历史搜索只在安装扩展后可用', error: true });
+    bus.emit('toast', { text: t('标签页 / 书签 / 历史搜索只在安装扩展后可用'), error: true });
     return;
   }
   const granted = await requestPermission(permissionKind);
   if (!granted) {
-    bus.emit('toast', { text: '未获得权限，命令面板保持精简', error: true });
+    bus.emit('toast', { text: t('未获得权限，命令面板保持精简'), error: true });
     return;
   }
   focusQuickCommand(prefix);
@@ -271,17 +278,17 @@ async function startQuickCommand(prefix, permissionKind = '') {
 function runQuickAction(spec) {
   if (spec.kind === 'todo') {
     addTodo(spec.arg);
-    bus.emit('toast', { text: `已添加待办：${spec.arg.slice(0, 30)}` });
+    bus.emit('toast', { text: t('已添加待办：{text}', { text: spec.arg.slice(0, 30) }) });
     return;
   }
   if (spec.kind === 'note') {
     const ok = appendNote(spec.arg);
-    bus.emit('toast', { text: ok ? '已追加到便签' : '便签内容为空', error: !ok });
+    bus.emit('toast', { text: ok ? t('已追加到便签') : t('便签内容为空'), error: !ok });
     return;
   }
   if (spec.kind === 'copy') {
     copyText(spec.arg).then((ok) => {
-      bus.emit('toast', { text: ok ? '已复制到剪贴板' : '复制失败，请检查剪贴板权限', error: !ok });
+      bus.emit('toast', { text: ok ? t('已复制到剪贴板') : t('复制失败，请检查剪贴板权限'), error: !ok });
     });
   }
 }
@@ -322,6 +329,29 @@ function looksLikeUrl(text) {
 
 /* --------------------------------------------------------------- 初始化 */
 
+function applySearchLabels() {
+  if (!els) return;
+  els.input.placeholder = t('搜索，或输入网址');
+  els.input.setAttribute('aria-label', t('搜索'));
+  els.submit.title = t('搜索');
+  els.submit.setAttribute('aria-label', t('搜索'));
+  els.clear.title = t('清空');
+  els.clear.setAttribute('aria-label', t('清空搜索'));
+  els.suggest.setAttribute('aria-label', t('搜索建议'));
+}
+
+/** 语言切换后刷新搜索框静态文案与提示，不需要重新初始化整个模块 */
+export function refreshSearchLocale() {
+  if (!els) return;
+  applySearchLabels();
+  paintedEngineId = '';
+  paintEngine();
+  hintBuilt = false;
+  paintHint();
+  // 旧语言的联想行不能继续留在 DOM 里；下次输入/聚焦会重新生成
+  closeSuggest();
+}
+
 export function initSearch() {
   els = {
     form: $('#search-form'),
@@ -343,6 +373,7 @@ export function initSearch() {
   els.input.setAttribute('aria-controls', 'suggest');
   els.input.setAttribute('aria-expanded', 'false');
   els.input.setAttribute('enterkeyhint', 'search');
+  applySearchLabels();
   paintEngine();
   paintHint();
   syncInputState();
@@ -421,7 +452,7 @@ export function initSearch() {
     const rect = els.engineBtn.getBoundingClientRect();
     openMenu(
       enginesFor(store.state.config).map((engine) => ({
-        label: engine.name,
+        label: engineName(engine),
         icon: store.state.config.search.engine === engine.id ? 'check' : undefined,
         onClick: () => {
           store.patchConfig({ search: { ...store.state.config.search, engine: engine.id } });
@@ -490,12 +521,13 @@ function paintEngine() {
   paintedEngineId = engine.id;
   clear(els.engineBtn);
   const slug = brandSlugFor(hostOf(engine.url));
+  const letter = engineLetter(engine);
   const badge = h('span', {
-    class: `engine-badge${engine.letter.length > 2 ? ' is-compact' : ''}${slug ? ' is-brand' : ''}`,
+    class: `engine-badge${letter.length > 2 ? ' is-compact' : ''}${slug ? ' is-brand' : ''}`,
     'aria-hidden': 'true',
   });
   // 品牌 logo 在某些风格里会被换回字母徽标（如终端），把首字母留在属性上给 CSS 用
-  badge.dataset.letter = engine.letter;
+  badge.dataset.letter = letter;
   if (slug) {
     const img = h('img', { src: brandLogoUrl(slug), alt: '', decoding: 'async' });
     img.addEventListener(
@@ -503,21 +535,22 @@ function paintEngine() {
       () => {
         img.remove();
         badge.classList.remove('is-brand');
-        badge.textContent = engine.letter;
+        badge.textContent = letter;
         badge.style.background = `linear-gradient(140deg, ${engine.color}, ${shade(engine.color, -0.22)})`;
       },
       { once: true }
     );
     badge.appendChild(img);
   } else {
-    badge.textContent = engine.letter;
+    badge.textContent = letter;
     badge.style.background = `linear-gradient(140deg, ${engine.color}, ${shade(engine.color, -0.22)})`;
     badge.style.color = readableTextOn(engine.color);
   }
+  const name = engineName(engine);
   els.engineBtn.appendChild(badge);
-  els.engineBtn.appendChild(h('span', { text: engine.name }));
+  els.engineBtn.appendChild(h('span', { text: name }));
   els.engineBtn.appendChild(h('span', { html: svgIcon('chevron-down', 13), style: { opacity: '.55' } }));
-  els.engineBtn.setAttribute('aria-label', `切换搜索引擎，当前${engine.name}`);
+  els.engineBtn.setAttribute('aria-label', t('切换搜索引擎，当前 {name}', { name }));
 }
 
 function shade(hex, amount) {
@@ -533,9 +566,9 @@ function paintHint() {
   if (!hintBuilt) {
     const key = IS_MAC ? '⌘' : 'Ctrl';
     els.hint.innerHTML =
-      `<span><kbd>${key}</kbd> + <kbd>K</kbd> 聚焦搜索</span>` +
-      `<span>输入「设置」「壁纸」直达命令</span>` +
-      `<span><kbd>?</kbd> 快捷键</span>`;
+      `<span><kbd>${key}</kbd> + <kbd>K</kbd> ${t('聚焦搜索')}</span>` +
+      `<span>${t('输入「设置」「壁纸」直达命令')}</span>` +
+      `<span><kbd>?</kbd> ${t('快捷键')}</span>`;
     hintBuilt = true;
   }
   els.hint.hidden = store.state.config.layout.showHint === false;
@@ -892,8 +925,8 @@ function buildRecentAction() {
   return h('button', {
     class: 'suggest-action',
     type: 'button',
-    text: '清除',
-    'aria-label': '清除最近搜索',
+    text: t('清除'),
+    'aria-label': t('清除最近搜索'),
     onclick: (event) => {
       event.stopPropagation();
       forgetRecent();
@@ -911,7 +944,7 @@ function appendSkeleton(engine) {
       h(
         'div',
         { class: 'suggest-group-label' },
-        h('span', { class: 'suggest-group-title', text: `${engine.name} 联想` }),
+        h('span', { class: 'suggest-group-title', text: t('{name} 联想', { name: engineName(engine) }) }),
         h('span', { class: 'suggest-loading-dots', text: '···' })
       ),
       ...[0, 1].map(() =>
@@ -932,12 +965,15 @@ function appendSuggestStatus(engine, query) {
     'div',
     { class: 'suggest-status', role: 'status' },
     h('span', { class: 'suggest-icon', html: svgIcon('info', 15) }),
-    h('span', { class: 'suggest-status-text', text: `${engine.name}联想暂不可用，可直接搜索` }),
+    h('span', {
+      class: 'suggest-status-text',
+      text: t('{name}联想暂不可用，可直接搜索', { name: engineName(engine) }),
+    }),
     h('button', {
       class: 'suggest-action',
       type: 'button',
-      text: '重试',
-      'aria-label': '重新获取搜索联想',
+      text: t('重试'),
+      'aria-label': t('重新获取搜索联想'),
       onclick: (event) => {
         event.stopPropagation();
         requestSuggest(query);
@@ -953,9 +989,9 @@ function appendFoot() {
     h(
       'div',
       { class: 'suggest-foot', 'aria-hidden': 'true' },
-      h('span', { class: 'suggest-foot-item' }, h('kbd', { text: '↑ ↓' }), h('span', { text: '选择' })),
-      h('span', { class: 'suggest-foot-item' }, h('kbd', { text: 'Enter' }), h('span', { text: '打开' })),
-      h('span', { class: 'suggest-foot-item' }, h('kbd', { text: 'Esc' }), h('span', { text: '关闭' }))
+      h('span', { class: 'suggest-foot-item' }, h('kbd', { text: '↑ ↓' }), h('span', { text: t('选择') })),
+      h('span', { class: 'suggest-foot-item' }, h('kbd', { text: 'Enter' }), h('span', { text: t('打开') })),
+      h('span', { class: 'suggest-foot-item' }, h('kbd', { text: 'Esc' }), h('span', { text: t('关闭') }))
     )
   );
 }
@@ -1088,7 +1124,7 @@ function renderSuggestions(remote = [], { keepActive = false, idle = false } = {
       return;
     }
     appendGroup(
-      '最近搜索',
+      t('最近搜索'),
       recent.map((text) => ({
         icon: 'history',
         text,
@@ -1118,7 +1154,7 @@ function renderSuggestions(remote = [], { keepActive = false, idle = false } = {
   // 1) 网址直开
   if (isUrl) {
     const url = normalizeUrl(query);
-    appendGroup('打开网址', [
+    appendGroup(t('打开网址'), [
       {
         icon: 'external',
         text: url.replace(/^https?:\/\//, ''),
@@ -1132,14 +1168,14 @@ function renderSuggestions(remote = [], { keepActive = false, idle = false } = {
 
   // 2) 命令：已经进入带参数模式时不再混排命令，避免 Enter 打错目标
   const commands = quick || pending ? [] : matchCommands(query);
-  commands.forEach((command) => claimed.add(command.label.toLowerCase()));
+  commands.forEach((command) => claimed.add(t(command.label).toLowerCase()));
   appendGroup(
-    '命令',
+    t('命令'),
     commands.map((command) => ({
       icon: command.icon,
-      text: command.label,
+      text: t(command.label),
       query,
-      hint: '命令',
+      hint: t('命令'),
       kind: 'command',
       run: () => {
         els.input.value = '';
@@ -1154,11 +1190,11 @@ function renderSuggestions(remote = [], { keepActive = false, idle = false } = {
   if (quick && ['todo', 'note', 'copy'].includes(quick.kind)) {
     const label =
       quick.kind === 'todo'
-        ? `添加待办「${quick.arg}」`
+        ? t('添加待办「{text}」', { text: quick.arg })
         : quick.kind === 'note'
-          ? `追加到便签「${quick.arg}」`
-          : `复制「${quick.arg}」`;
-    appendGroup('快捷动作', [
+          ? t('追加到便签「{text}」', { text: quick.arg })
+          : t('复制「{text}」', { text: quick.arg });
+    appendGroup(t('快捷动作'), [
       {
         icon: quick.icon,
         text: label,
@@ -1180,28 +1216,29 @@ function renderSuggestions(remote = [], { keepActive = false, idle = false } = {
   // 2.6) 标签页 / 书签 / 历史：异步取数据，没授权时给出明确入口
   if (quick && ['tabs', 'bookmarks', 'history'].includes(quick.kind)) {
     const source = quickSource(quick.kind);
+    const quickTitle = t(quick.title);
     if (!hasPermissionApi()) {
-      appendPaletteStatus(`${quick.title}搜索只在安装扩展后可用`);
+      appendPaletteStatus(t('{name}搜索只在安装扩展后可用', { name: quickTitle }));
     } else if (quickState.key !== quick.key || quickState.status === 'loading') {
-      appendPaletteStatus(`正在搜索${quick.title}…`, { loading: true });
+      appendPaletteStatus(t('正在搜索{name}…', { name: quickTitle }), { loading: true });
     } else if (quickState.status === 'denied') {
-      appendGroup(quick.title, [
+      appendGroup(quickTitle, [
         {
           icon: 'lock',
-          text: `启用${quick.title}搜索`,
-          hint: '需要授权',
+          text: t('启用{name}搜索', { name: quickTitle }),
+          hint: t('需要授权'),
           run: () => startQuickCommand(`${quick.kind === 'tabs' ? 'tab' : quick.kind === 'bookmarks' ? 'bookmark' : 'history'} `, quick.kind),
         },
       ]);
     } else if (quickState.status === 'unavailable') {
-      appendPaletteStatus(`${quick.title}搜索只在安装扩展后可用`);
+      appendPaletteStatus(t('{name}搜索只在安装扩展后可用', { name: quickTitle }));
     } else if (quickState.status === 'error') {
-      appendPaletteStatus(`${quick.title}读取失败，可直接搜索`);
+      appendPaletteStatus(t('{name}读取失败，可直接搜索', { name: quickTitle }));
     } else if (!quickState.items.length) {
-      appendPaletteStatus(`没有找到匹配的${quick.title}`);
+      appendPaletteStatus(t('没有找到匹配的{name}', { name: quickTitle }));
     } else {
       appendGroup(
-        quick.title,
+        quickTitle,
         quickState.items.map((item) => ({
           icon: quick.kind === 'bookmarks' ? 'folder' : quick.kind === 'history' ? 'history' : 'external',
           text: item.title,
@@ -1211,12 +1248,12 @@ function renderSuggestions(remote = [], { keepActive = false, idle = false } = {
         }))
       );
     }
-    if (source) claimed.add(quick.title.toLowerCase());
+    if (source) claimed.add(quickTitle.toLowerCase());
   }
 
   // 2.7) 只写了前缀：告诉用户接下来该输入什么，而不是悄悄退化成搜索
   if (pending) {
-    appendPaletteStatus(QUICK_HINTS[pending]);
+    appendPaletteStatus(t(QUICK_HINTS[pending]));
     extraContent = true;
   }
 
@@ -1228,12 +1265,12 @@ function renderSuggestions(remote = [], { keepActive = false, idle = false } = {
       .slice(0, 4);
     matches.forEach((item) => claimed.add(item.title.toLowerCase()));
     appendGroup(
-      '快捷方式',
+      t('快捷方式'),
       matches.map((item) => ({
         thumb: buildShortcutThumb(item),
         text: item.title,
         query,
-        hint: item.groupId ? groupTitles.get(item.groupId) || '文件夹' : '',
+        hint: item.groupId ? groupTitles.get(item.groupId) || t('文件夹') : '',
         run: () => navigate(item.url),
       }))
     );
@@ -1246,7 +1283,7 @@ function renderSuggestions(remote = [], { keepActive = false, idle = false } = {
       .slice(0, 3);
     recentMatches.forEach((text) => claimed.add(text.toLowerCase()));
     appendGroup(
-      '最近搜索',
+      t('最近搜索'),
       recentMatches.map((text) => ({
         icon: 'history',
         text,
@@ -1281,7 +1318,7 @@ function renderSuggestions(remote = [], { keepActive = false, idle = false } = {
     });
     if (remoteRows.length >= 8) break;
   }
-  appendGroup(`${engine.name} 联想`, remoteRows);
+  appendGroup(t('{name} 联想', { name: engineName(engine) }), remoteRows);
 
   // 6) 联想请求还在路上：先占两行骨架，避免看起来像没反应
   if (
@@ -1317,7 +1354,7 @@ function renderSuggestions(remote = [], { keepActive = false, idle = false } = {
       appendGroup(null, [
         {
           icon: 'search',
-          text: `用${engine.name}搜索「${query}」`,
+          text: t('用{name}搜索「{query}」', { name: engineName(engine), query }),
           query,
           hint: 'Enter',
           kind: 'search',

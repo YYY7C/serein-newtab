@@ -3,11 +3,12 @@
  */
 
 import { uid, normalizeUrl, isUsableUrl, isSafeImageUrl } from './util.js';
+import { t, LANGUAGE_PREFERENCES, isEnglish } from './i18n.js';
 
 export const APP = {
   name: 'Serein',
   subtitle: '新标签页',
-  version: '1.5.1',
+  version: '1.6.0',
   schema: 1,
 };
 
@@ -199,16 +200,23 @@ export const styleById = (id) => STYLES.find((s) => s.id === id) || STYLES[0];
 /* --------------------------------------------------------------- 搜索引擎 */
 
 export const ENGINES = [
-  { id: 'baidu', name: '百度', url: 'https://www.baidu.com/s?wd=%s', color: '#2932E1', letter: '百', suggest: 'baidu' },
-  { id: 'bing', name: '必应', url: 'https://cn.bing.com/search?q=%s', color: '#0C8484', letter: '必', suggest: 'bing' },
+  { id: 'baidu', name: '百度', url: 'https://www.baidu.com/s?wd=%s', color: '#2932E1', letter: '百', letterEn: 'B', suggest: 'baidu' },
+  { id: 'bing', name: '必应', url: 'https://cn.bing.com/search?q=%s', color: '#0C8484', letter: '必', letterEn: 'B', suggest: 'bing' },
   { id: 'google', name: 'Google', url: 'https://www.google.com/search?q=%s', color: '#4285F4', letter: 'G', suggest: 'google' },
   { id: 'so360', name: '360 搜索', url: 'https://www.so.com/s?q=%s', color: '#19B955', letter: '360', suggest: '360' },
-  { id: 'sogou', name: '搜狗', url: 'https://www.sogou.com/web?query=%s', color: '#FB6022', letter: '搜', suggest: null },
+  { id: 'sogou', name: '搜狗', url: 'https://www.sogou.com/web?query=%s', color: '#FB6022', letter: '搜', letterEn: 'S', suggest: null },
   { id: 'ddg', name: 'DuckDuckGo', url: 'https://duckduckgo.com/?q=%s', color: '#DE5833', letter: 'D', suggest: 'duckduckgo' },
-  { id: 'zhihu', name: '知乎', url: 'https://www.zhihu.com/search?type=content&q=%s', color: '#0084FF', letter: '知', suggest: null },
-  { id: 'bilibili', name: '哔哩哔哩', url: 'https://search.bilibili.com/all?keyword=%s', color: '#FB7299', letter: '哔', suggest: 'bilibili' },
+  { id: 'zhihu', name: '知乎', url: 'https://www.zhihu.com/search?type=content&q=%s', color: '#0084FF', letter: '知', letterEn: 'Z', suggest: null },
+  { id: 'bilibili', name: '哔哩哔哩', url: 'https://search.bilibili.com/all?keyword=%s', color: '#FB7299', letter: '哔', letterEn: 'B', suggest: 'bilibili' },
   { id: 'github', name: 'GitHub', url: 'https://github.com/search?q=%s', color: '#24292F', letter: 'G', suggest: null },
 ];
+
+/** 内置引擎名是界面文案，随语言切换；自定义引擎名是用户输入，原样显示 */
+export const engineName = (engine) => (engine?.custom ? engine.name : t(engine?.name || ''));
+
+/** 引擎徽标：英文界面用拉丁字母，避免出现单个汉字 */
+export const engineLetter = (engine) =>
+  isEnglish() && engine?.letterEn ? engine.letterEn : engine?.letter || '';
 
 export const WALLPAPER_POOL_LIMIT = 20;
 export const WALLPAPER_ROTATIONS = ['off', 'newtab', 'hour', 'day'];
@@ -304,7 +312,8 @@ export function createDefaultState() {
 
   const shortcuts = SEED_SHORTCUTS.map((item, index) => ({
     id: seedId(`s${index}`),
-    title: item.title,
+    // 首次安装按当前语言落种子名称；之后它就是用户数据，不再随语言变化
+    title: t(item.title),
     url: item.url,
     iconType: 'auto',
     iconValue: '',
@@ -315,7 +324,7 @@ export function createDefaultState() {
 
   const folderItems = SEED_FOLDER_ITEMS.map((item, index) => ({
     id: seedId(`f${index}`),
-    title: item.title,
+    title: t(item.title),
     url: item.url,
     iconType: 'auto',
     iconValue: '',
@@ -340,6 +349,8 @@ export function createDefaultState() {
     },
     config: {
       theme: 'auto',
+      /** auto 跟随浏览器，其余为明确选择 */
+      language: 'auto',
       style: 'noir',
       accent: '#7c8cff',
       glass: 18,
@@ -425,22 +436,24 @@ export function createDefaultState() {
     groups: [
       {
         id: folderId,
-        title: '工具',
+        title: t('工具'),
         order: (SEED_SHORTCUTS.length + 1) * 10,
         createdAt: Date.now(),
       },
     ],
     shortcuts: [...shortcuts, ...folderItems],
     todos: [
-      { id: 'seed-todo-1', text: '右键点击图标可以编辑或分类', done: false, createdAt: Date.now() },
-      { id: 'seed-todo-2', text: '把常用的图标拖进文件夹试试', done: false, createdAt: Date.now() + 1 },
+      { id: 'seed-todo-1', text: t('右键点击图标可以编辑或分类'), done: false, createdAt: Date.now() },
+      { id: 'seed-todo-2', text: t('把常用的图标拖进文件夹试试'), done: false, createdAt: Date.now() + 1 },
     ],
     notes: '',
     worldClocks: ['America/New_York', 'Europe/London', 'Asia/Tokyo'],
     pomodoro: { phase: 'focus', remaining: 25 * 60, endsAt: 0, running: false },
     countdown: { title: '', target: 0 },
     weather: {
+      // city 存中文规范名，cityEn 用于英文界面；两者都由城市库提供
       city: '北京',
+      cityEn: 'Beijing',
       lat: 39.9042,
       lon: 116.4074,
       updatedAt: 0,
@@ -548,7 +561,7 @@ export function migrate(raw) {
     .filter((g) => g && typeof g.id === 'string' && g.id)
     .map((g, index) => ({
       id: g.id,
-      title: typeof g.title === 'string' && g.title.trim() ? g.title.trim().slice(0, 40) : '文件夹',
+      title: typeof g.title === 'string' && g.title.trim() ? g.title.trim().slice(0, 40) : t('文件夹'),
       order: Number.isFinite(g.order) ? g.order : index * 10,
       createdAt: toFiniteNumber(g.createdAt) || Date.now(),
     }))
@@ -575,7 +588,7 @@ export function migrate(raw) {
       seenShortcutIds.add(id);
       return {
         id,
-        title: typeof s.title === 'string' && s.title.trim() ? s.title.trim().slice(0, 80) : '未命名',
+        title: typeof s.title === 'string' && s.title.trim() ? s.title.trim().slice(0, 80) : t('未命名'),
         url: s.url,
         iconType: ['auto', 'favicon', 'emoji', 'url', 'file', 'text'].includes(s.iconType) ? s.iconType : 'auto',
         iconValue: typeof s.iconValue === 'string' ? s.iconValue.slice(0, 2048) : '',
@@ -605,11 +618,19 @@ export function migrate(raw) {
   const weatherLat = toFiniteNumber(rawWeather.lat);
   const weatherLon = toFiniteNumber(rawWeather.lon);
   const weatherUpdated = toFiniteNumber(rawWeather.updatedAt);
+  const weatherCity =
+    typeof rawWeather.city === 'string' && rawWeather.city.trim()
+      ? rawWeather.city.trim().slice(0, 40)
+      : defaults.weather.city;
+  // 英文名只信任用户显式保存的值；老数据里的默认值不能盖到另一个城市上
+  const explicitCityEn = typeof raw.weather?.cityEn === 'string' ? raw.weather.cityEn.trim() : '';
   merged.weather = {
-    city:
-      typeof rawWeather.city === 'string' && rawWeather.city.trim()
-        ? rawWeather.city.trim().slice(0, 40)
-        : defaults.weather.city,
+    city: weatherCity,
+    cityEn: explicitCityEn
+      ? explicitCityEn.slice(0, 60)
+      : weatherCity === defaults.weather.city
+        ? defaults.weather.cityEn
+        : '',
     lat: Number.isFinite(weatherLat) && weatherLat >= -90 && weatherLat <= 90 ? weatherLat : defaults.weather.lat,
     lon:
       Number.isFinite(weatherLon) && weatherLon >= -180 && weatherLon <= 180
@@ -677,14 +698,14 @@ export function migrate(raw) {
       seen.add(id);
       pool.push({
         id,
-        name: String(item?.name ?? '本地壁纸').trim().slice(0, 40) || '本地壁纸',
+        name: String(item?.name ?? t('本地壁纸')).trim().slice(0, 40) || t('本地壁纸'),
         addedAt: Number.isFinite(Number(item?.addedAt)) ? Number(item.addedAt) : Date.now(),
       });
       if (pool.length >= WALLPAPER_POOL_LIMIT) break;
     }
     const legacyId = String(raw.config?.background?.fileId ?? '').trim();
     if (legacyId && /^[a-z0-9_-]{6,64}$/i.test(legacyId) && !seen.has(legacyId) && pool.length < WALLPAPER_POOL_LIMIT) {
-      pool.unshift({ id: legacyId, name: '本地壁纸', addedAt: Date.now() });
+      pool.unshift({ id: legacyId, name: t('本地壁纸'), addedAt: Date.now() });
       seen.add(legacyId);
     }
     merged.config.background.pool = pool;
@@ -700,6 +721,7 @@ export function migrate(raw) {
     : 0;
   if (!['right', 'left', 'hidden'].includes(merged.config.sidebar)) merged.config.sidebar = defaults.config.sidebar;
   if (!['right', 'left'].includes(merged.config.lastSidebar)) merged.config.lastSidebar = 'right';
+  if (!LANGUAGE_PREFERENCES.includes(merged.config.language)) merged.config.language = 'auto';
   {
     // 自定义引擎来自导入文件：只保留校验通过、id/地址不重复的前 N 个
     const rawEngines = Array.isArray(raw.config?.search?.engines) ? raw.config.search.engines : [];

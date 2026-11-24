@@ -2,6 +2,8 @@
  * 无任何第三方依赖：DOM 构造、事件总线、URL 归一化、颜色推导、图标片段。
  */
 
+import { t } from './i18n.js';
+
 export const $ = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
@@ -107,12 +109,12 @@ export function formatBytes(bytes) {
 }
 
 export function relativeTime(ts) {
-  if (!ts) return '从未';
+  if (!ts) return t('从未');
   const diff = Date.now() - ts;
-  if (diff < 60_000) return '刚刚';
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)} 分钟前`;
-  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)} 小时前`;
-  return `${Math.floor(diff / 86_400_000)} 天前`;
+  if (diff < 60_000) return t('刚刚');
+  if (diff < 3_600_000) return t('{n} 分钟前', { n: Math.floor(diff / 60_000) });
+  if (diff < 86_400_000) return t('{n} 小时前', { n: Math.floor(diff / 3_600_000) });
+  return t('{n} 天前', { n: Math.floor(diff / 86_400_000) });
 }
 
 /* --------------------------------------------------------------- 字符串 */

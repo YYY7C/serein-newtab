@@ -1333,9 +1333,15 @@ html[data-style='terminal'] .grid > .tile.drop-after::before {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: 86px 20px 24px 0;
+  padding: 86px 20px 28px 0;
   overflow-y: auto;
   overflow-x: hidden;
+  overscroll-behavior-y: contain;
+  /* 重建卡片时由脚本恢复 scrollTop，浏览器不要再用滚动锚定二次挪动 */
+  overflow-anchor: none;
+  scroll-padding-block: 8px 20px;
+  /* 原生滚动条会占用卡片宽度，使卡片右缘和顶栏按钮错位；
+     改用下面不影响布局的侧栏滚动指示条 */
   scrollbar-width: none;
   transition: flex-basis 0.32s var(--ease), width 0.32s var(--ease), opacity 0.24s var(--ease),
     padding 0.32s var(--ease);
@@ -1349,6 +1355,58 @@ html[data-style='terminal'] .grid > .tile.drop-after::before {
   display: none;
 }
 
+.sidebar-scroll-rail {
+  position: absolute;
+  top: 86px;
+  bottom: 24px;
+  right: 6px;
+  z-index: 5;
+  width: 4px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.18s var(--ease);
+}
+
+.sidebar-scroll-rail.is-visible {
+  opacity: 0.42;
+}
+
+.sidebar:hover + .sidebar-scroll-rail.is-visible,
+.sidebar:focus-within + .sidebar-scroll-rail.is-visible {
+  opacity: 0.9;
+}
+
+.sidebar.is-hidden + .sidebar-scroll-rail {
+  opacity: 0;
+}
+
+.sidebar-scroll-rail i {
+  display: block;
+  width: 100%;
+  height: var(--rail-thumb, 40px);
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--fg-2) 34%, transparent);
+  transform: translateY(var(--rail-y, 0));
+  transition: transform 0.08s linear;
+}
+
+html[data-sidebar='left'] .sidebar-scroll-rail {
+  right: auto;
+  left: 6px;
+}
+
+/* 底部渐隐：提示下面还有卡片；滚到底后自动撤掉，避免最后一张卡被吃掉 */
+.sidebar.is-scrollable:not(.is-scroll-end) {
+  mask-image: linear-gradient(to bottom, transparent 0, #000 60px, #000 calc(100% - 26px), transparent 100%);
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 60px,
+    #000 calc(100% - 26px),
+    transparent 100%
+  );
+}
+
 .sidebar.is-hidden {
   flex-basis: 0;
   width: 0;
@@ -1359,7 +1417,7 @@ html[data-style='terminal'] .grid > .tile.drop-after::before {
 
 .sidebar.is-left {
   order: -1;
-  padding: 86px 0 24px 20px;
+  padding: 86px 0 28px 20px;
 }
 
 /* 便签卡片吸收侧栏剩余高度：右列始终铺到底，不留空档 */
@@ -1444,6 +1502,11 @@ html[data-style='terminal'] .grid > .tile.drop-after::before {
   color: var(--fg-1);
 }
 
+.card-action:disabled {
+  opacity: 0.32;
+  pointer-events: none;
+}
+
 /* ------------------------------------------------------------------ 天气 */
 
 .weather-main {
@@ -1495,20 +1558,52 @@ html[data-style='terminal'] .grid > .tile.drop-after::before {
   color: var(--fg-3);
 }
 
+.weather-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
 .weather-city {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  min-width: 0;
+  max-width: 132px;
   font-size: 12px;
   color: var(--fg-2);
-  padding: 2px 6px;
+  padding: 2px 5px 2px 6px;
   border-radius: 6px;
-  transition: background 0.15s var(--ease);
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
 }
 
 .weather-city:hover {
   background: var(--menu-hover);
   color: var(--fg-1);
+}
+
+.weather-city .city-pin,
+.weather-city .city-caret {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  opacity: 0.72;
+}
+
+.weather-city .city-caret {
+  opacity: 0.45;
+}
+
+.weather-city .city-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.weather-refresh.is-busy svg {
+  animation: suggest-spin 0.9s linear infinite;
 }
 
 .forecast {
@@ -1688,7 +1783,8 @@ html[data-style='terminal'] .grid > .tile.drop-after::before {
   transition: opacity 0.15s var(--ease), background 0.15s var(--ease), color 0.15s var(--ease);
 }
 
-.todo-item:hover .todo-del {
+.todo-item:hover .todo-del,
+.todo-item:focus-within .todo-del {
   opacity: 1;
 }
 
@@ -1703,6 +1799,9 @@ html[data-style='terminal'] .grid > .tile.drop-after::before {
   font-size: 12px;
   color: var(--fg-3);
   line-height: 1.6;
+  /* 待办空状态用 \n 分成两行 */
+  white-space: pre-line;
+  overflow-wrap: anywhere;
 }
 
 /* --------------------------------------------------------------- 专注 */
@@ -2018,22 +2117,34 @@ html[data-style='terminal'] .grid > .tile.drop-after::before {
     flex-direction: row;
     align-items: stretch;
     gap: 12px;
-    padding: 4px 16px 16px;
+    padding: 4px 16px calc(16px + env(safe-area-inset-bottom));
     overflow-x: auto;
     overflow-y: hidden;
-    mask-image: none;
-    -webkit-mask-image: none;
+    overscroll-behavior-x: contain;
+    scroll-padding-inline: 16px;
+    scrollbar-width: none;
+    mask-image: none !important;
+    -webkit-mask-image: none !important;
     scroll-snap-type: x proximity;
+  }
+  .sidebar::-webkit-scrollbar {
+    display: none;
+  }
+  .sidebar-scroll-rail {
+    display: none;
   }
   .sidebar > .card,
   .sidebar > .card.is-notes {
     flex: 0 0 min(280px, 78vw);
     scroll-snap-align: start;
+    scroll-snap-stop: always;
   }
   .sidebar.is-hidden {
     flex-basis: 0;
     height: 0;
+    max-height: 0;
     padding: 0;
+    overflow: hidden;
   }
   html[data-sidebar='left'] .topbar-left {
     padding-left: 0;
@@ -2044,6 +2155,66 @@ html[data-style='terminal'] .grid > .tile.drop-after::before {
   }
   .content.is-top {
     padding-top: 84px;
+  }
+}
+
+/* 矮屏笔记本：侧栏减少留白，尽量让第三张卡片露出来 */
+@media (min-width: 881px) and (max-height: 820px) {
+  .sidebar,
+  .sidebar.is-left {
+    gap: 11px;
+    padding-top: 78px;
+    padding-bottom: 22px;
+  }
+  .sidebar-scroll-rail {
+    top: 78px;
+    bottom: 22px;
+  }
+  .sidebar > .card {
+    padding: 13px 14px;
+  }
+  .card-head {
+    margin-bottom: 9px;
+  }
+  .weather-main {
+    gap: 12px;
+  }
+  .weather-glyph {
+    width: 46px;
+    height: 46px;
+  }
+  .weather-temp {
+    font-size: 32px;
+  }
+  .forecast {
+    margin-top: 10px;
+    padding-top: 9px;
+  }
+  .forecast-day {
+    gap: 3px;
+    padding: 3px 0;
+  }
+  .forecast-name {
+    font-size: 10px;
+  }
+  .forecast-temp {
+    font-size: 10.5px;
+  }
+  .todo-list,
+  .link-list {
+    max-height: 160px;
+  }
+  .pomo-time {
+    font-size: 28px;
+  }
+  .worldclock-row {
+    padding: 4px 0;
+  }
+  .countdown-cell {
+    padding: 4px 2px;
+  }
+  .notes-area {
+    min-height: 84px;
   }
 }
 

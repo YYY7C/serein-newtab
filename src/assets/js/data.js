@@ -1,6 +1,7 @@
 /* Serein · 数据导入 / 导出 / 重置 */
 
 import * as store from './store.js';
+import { t } from './i18n.js';
 import { files, assetUsage, clearLocal, clearChromeMirror, requestPersistentStorage } from './storage.js';
 import { APP, STYLES } from './defaults.js';
 import { clamp, isUsableUrl } from './util.js';
@@ -107,8 +108,8 @@ export function exportTheme() {
 }
 
 function sanitizeTheme(input) {
-  if (!input || typeof input !== 'object') throw new Error('主题文件结构无法识别');
-  if (input._format && input._format !== 'serein-theme') throw new Error('不是 Serein 主题文件');
+  if (!input || typeof input !== 'object') throw new Error(t('主题文件结构无法识别'));
+  if (input._format && input._format !== 'serein-theme') throw new Error(t('不是 Serein 主题文件'));
   const theme = input.theme && typeof input.theme === 'object' ? input.theme : input;
   const bg = theme.background && typeof theme.background === 'object' ? theme.background : {};
   // 随便一个 JSON（比如别的扩展的备份）不能被当成「空主题」静默接受
@@ -119,7 +120,7 @@ function sanitizeTheme(input) {
     ['tone', 'blur', 'brightness', 'saturate', 'vignette', 'veilByStyle'].some(
       (key) => bg[key] !== undefined
     );
-  if (!hasFields) throw new Error('主题文件里没有可识别的外观设置');
+  if (!hasFields) throw new Error(t('主题文件里没有可识别的外观设置'));
   const number = (value, min, max) => {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? clamp(parsed, min, max) : null;
@@ -152,12 +153,12 @@ function sanitizeTheme(input) {
 }
 
 export async function importTheme(file) {
-  if (!file || file.size > 1024 * 1024) throw new Error('主题文件超过 1 MB');
+  if (!file || file.size > 1024 * 1024) throw new Error(t('主题文件超过 1 MB'));
   let parsed;
   try {
     parsed = JSON.parse((await file.text()).replace(/^\uFEFF/, ''));
   } catch {
-    throw new Error('主题文件不是合法的 JSON');
+    throw new Error(t('主题文件不是合法的 JSON'));
   }
   const theme = sanitizeTheme(parsed);
   store.update((state) => {
@@ -188,8 +189,8 @@ const MAX_ZIP_BYTES = 64 * 1024 * 1024;
 
 /** 校验并清洗快捷方式；不合格的备份直接拒绝，避免误清空现有数据 */
 function sanitizeIncoming(incoming) {
-  if (!incoming || typeof incoming !== 'object') throw new Error('文件结构无法识别');
-  if (!Array.isArray(incoming.shortcuts)) throw new Error('缺少 shortcuts 字段，可能不是 Serein 的备份');
+  if (!incoming || typeof incoming !== 'object') throw new Error(t('文件结构无法识别'));
+  if (!Array.isArray(incoming.shortcuts)) throw new Error(t('缺少 shortcuts 字段，可能不是 Serein 的备份'));
 
   const shortcuts = incoming.shortcuts.filter(
     (item) => item && typeof item.url === 'string' && isUsableUrl(item.url)
@@ -197,7 +198,7 @@ function sanitizeIncoming(incoming) {
   // 空快捷方式列表本身是合法备份（用户可能删光了）；但「原先有、却全部无效」
   // 或只有一句空 shortcuts 的文件仍应拒绝，免得误清空数据。
   if (!shortcuts.length && (incoming.shortcuts.length || (!incoming.meta && !incoming.config))) {
-    throw new Error('备份里没有有效的快捷方式');
+    throw new Error(t('备份里没有有效的快捷方式'));
   }
   return shortcuts;
 }
@@ -209,14 +210,14 @@ export async function importState(file) {
 
 async function importJson(file) {
   // 旧版 JSON 备份不含图片；仍然保留兼容，换机后需要重新上传壁纸/图标
-  if (file.size > MAX_JSON_BYTES) throw new Error('备份文件超过 8 MB，可能不是 Serein 的配置');
+  if (file.size > MAX_JSON_BYTES) throw new Error(t('备份文件超过 8 MB，可能不是 Serein 的配置'));
   // Windows 记事本等编辑器可能给 UTF-8 文件加 BOM，JSON.parse 会因此失败
   const text = (await file.text()).replace(/^\uFEFF/, '');
   let parsed;
   try {
     parsed = JSON.parse(text);
   } catch {
-    throw new Error('文件不是合法的 JSON');
+    throw new Error(t('文件不是合法的 JSON'));
   }
 
   const incoming = parsed?.state || parsed;
@@ -226,18 +227,18 @@ async function importJson(file) {
 }
 
 async function importZip(file) {
-  if (file.size > MAX_ZIP_BYTES) throw new Error('备份文件超过 64 MB');
+  if (file.size > MAX_ZIP_BYTES) throw new Error(t('备份文件超过 64 MB'));
   const entries = await readZip(file);
   const manifestBytes = entries.get('manifest.json');
-  if (!manifestBytes) throw new Error('备份里缺少 manifest.json');
+  if (!manifestBytes) throw new Error(t('备份里缺少 manifest.json'));
 
   let parsed;
   try {
     parsed = JSON.parse(new TextDecoder().decode(manifestBytes));
   } catch {
-    throw new Error('manifest.json 不是合法的 JSON');
+    throw new Error(t('manifest.json 不是合法的 JSON'));
   }
-  if (parsed?._format !== 'serein-backup') throw new Error('不是 Serein 的备份文件');
+  if (parsed?._format !== 'serein-backup') throw new Error(t('不是 Serein 的备份文件'));
 
   const incoming = parsed.state;
   const shortcuts = sanitizeIncoming(incoming);
@@ -251,7 +252,7 @@ async function importZip(file) {
     if (!bytes) continue;
     const blob = new Blob([bytes], { type: typeof asset.type === 'string' ? asset.type : '' });
     const result = await files.put(asset.key, blob);
-    if (result == null) throw new Error('图片写入失败，可能是存储空间不足');
+    if (result == null) throw new Error(t('图片写入失败，可能是存储空间不足'));
     restored += 1;
   }
 

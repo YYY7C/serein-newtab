@@ -4,6 +4,8 @@
  * 不追求通用解压器，但会校验签名、CRC 和尺寸，损坏时抛错而不是写坏数据。
  */
 
+import { t } from './i18n.js';
+
 const LOCAL_SIG = 0x04034b50;
 const CENTRAL_SIG = 0x02014b50;
 const EOCD_SIG = 0x06054b50;
@@ -175,22 +177,22 @@ export async function readZip(source) {
     source instanceof Uint8Array
       ? source
       : new Uint8Array(source instanceof Blob ? await source.arrayBuffer() : source);
-  if (bytes.length < 22) throw new Error('文件太短，不是有效的备份');
+  if (bytes.length < 22) throw new Error(t('文件太短，不是有效的备份'));
   const view = viewOf(bytes);
   const eocd = findEocd(view);
-  if (eocd < 0) throw new Error('找不到 zip 目录，文件可能已损坏');
+  if (eocd < 0) throw new Error(t('找不到 zip 目录，文件可能已损坏'));
 
   const count = view.getUint16(eocd + 10, true);
   const centralOffset = view.getUint32(eocd + 16, true);
-  if (centralOffset >= bytes.length) throw new Error('zip 目录偏移越界');
+  if (centralOffset >= bytes.length) throw new Error(t('zip 目录偏移越界'));
 
   const decoder = new TextDecoder();
   const out = new Map();
   let cursor = centralOffset;
 
   for (let index = 0; index < count; index += 1) {
-    if (cursor + 46 > bytes.length) throw new Error('zip 目录被截断');
-    if (view.getUint32(cursor, true) !== CENTRAL_SIG) throw new Error('zip 目录签名错误');
+    if (cursor + 46 > bytes.length) throw new Error(t('zip 目录被截断'));
+    if (view.getUint32(cursor, true) !== CENTRAL_SIG) throw new Error(t('zip 目录签名错误'));
     const method = view.getUint16(cursor + 10, true);
     const crc = view.getUint32(cursor + 16, true);
     const compSize = view.getUint32(cursor + 20, true);
@@ -202,21 +204,21 @@ export async function readZip(source) {
     const name = decoder.decode(bytes.subarray(cursor + 46, cursor + 46 + nameLen));
     cursor += 46 + nameLen + extraLen + commentLen;
 
-    if (localOffset + 30 > bytes.length) throw new Error(`条目 ${name} 的本地头越界`);
-    if (view.getUint32(localOffset, true) !== LOCAL_SIG) throw new Error(`条目 ${name} 的本地头签名错误`);
+    if (localOffset + 30 > bytes.length) throw new Error(t('条目 {name} 的本地头越界', { name }));
+    if (view.getUint32(localOffset, true) !== LOCAL_SIG) throw new Error(t('条目 {name} 的本地头签名错误', { name }));
     const localNameLen = view.getUint16(localOffset + 26, true);
     const localExtraLen = view.getUint16(localOffset + 28, true);
     const dataStart = localOffset + 30 + localNameLen + localExtraLen;
-    if (dataStart + compSize > bytes.length) throw new Error(`条目 ${name} 的数据越界`);
+    if (dataStart + compSize > bytes.length) throw new Error(t('条目 {name} 的数据越界', { name }));
 
     const raw = bytes.subarray(dataStart, dataStart + compSize);
     let data;
     if (method === 0) data = raw;
     else if (method === 8) data = await inflateRaw(raw);
-    else throw new Error(`条目 ${name} 使用了不支持的压缩方式 ${method}`);
+    else throw new Error(t('条目 {name} 使用了不支持的压缩方式 {method}', { name, method }));
 
-    if (data.length !== rawSize) throw new Error(`条目 ${name} 的解压尺寸不符`);
-    if (crc !== crc32(data)) throw new Error(`条目 ${name} 的校验和不符`);
+    if (data.length !== rawSize) throw new Error(t('条目 {name} 的解压尺寸不符', { name }));
+    if (crc !== crc32(data)) throw new Error(t('条目 {name} 的校验和不符', { name }));
     out.set(name, data);
   }
 

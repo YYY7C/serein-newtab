@@ -23,6 +23,8 @@ import {
   APP,
   STYLES,
   styleById,
+  engineName,
+  engineLetter,
   RECENT_SEARCH_LIMIT,
   enginesFor,
   sanitizeCustomEngine,
@@ -30,6 +32,7 @@ import {
   CUSTOM_ENGINE_NAME_MAX,
   WALLPAPER_POOL_LIMIT,
 } from './defaults.js';
+import { t, resolveLocale, setLocale, onLocaleChange } from './i18n.js';
 import {
   applyBackground,
   applyBackgroundLook,
@@ -99,7 +102,12 @@ export function initSettings() {
   navEl = h('nav', { class: 'settings-nav' });
   bodyEl = h('div', { class: 'settings-body scroll' });
 
-  panel = h('div', { class: 'settings-panel', role: 'dialog', 'aria-modal': 'true', 'aria-label': '设置' }, navEl, bodyEl);
+  panel = h(
+    'div',
+    { class: 'settings-panel', role: 'dialog', 'aria-modal': 'true', 'aria-label': t('设置') },
+    navEl,
+    bodyEl
+  );
   root = h('div', { class: 'settings' }, scrim, panel);
   document.body.appendChild(root);
 
@@ -108,6 +116,18 @@ export function initSettings() {
   // 其它标签页改了配置（例如换壁纸/改布局）：设置面板开着时同步重建当前分区
   window.addEventListener('serein:state-adopted', () => {
     if (isOpen) selectSection(activeTab);
+  });
+
+  // 语言切换可能发生在当前分区的控件里：等事件栈退出后再重建，
+  // 避免把正在处理点击的按钮从 DOM 里摘掉。
+  onLocaleChange(() => {
+    if (!root) return;
+    queueMicrotask(() => {
+      if (!root) return;
+      buildNav();
+      panel.setAttribute('aria-label', t('设置'));
+      if (isOpen) selectSection(activeTab);
+    });
   });
 
   scrim.addEventListener('click', close);
@@ -175,7 +195,7 @@ function buildNav() {
           onclick: () => selectSection(section.id),
         },
         h('span', { html: svgIcon(section.icon, 16) }),
-        h('span', { text: section.label })
+        h('span', { text: t(section.label) })
       )
     );
   }
@@ -270,13 +290,13 @@ function buildHeader(section) {
     h(
       'div',
       {},
-      h('h1', { class: 'settings-title', text: section.label }),
-      h('p', { class: 'settings-desc', text: HEADERS[section.id] || '' })
+      h('h1', { class: 'settings-title', text: t(section.label) }),
+      h('p', { class: 'settings-desc', text: t(HEADERS[section.id] || '') })
     ),
     h('button', {
       class: 'settings-close',
       type: 'button',
-      'aria-label': '关闭设置',
+      'aria-label': t('关闭设置'),
       html: svgIcon('close', 16),
       onclick: close,
     })
@@ -352,7 +372,7 @@ function buildAppearance() {
   const bg = config.background;
 
   /* ---- 视觉风格选择器 ---- */
-  const styleDesc = h('div', { class: 'field-hint', style: { marginTop: '10px' }, text: styleById(config.style).desc });
+  const styleDesc = h('div', { class: 'field-hint', style: { marginTop: '10px' }, text: t(styleById(config.style).desc) });
   const styleGrid = h('div', { class: 'style-grid' });
 
   for (const preset of STYLES) {
@@ -364,7 +384,7 @@ function buildAppearance() {
           type: 'button',
           'data-style-id': preset.id,
           'aria-pressed': String(config.style === preset.id),
-          title: preset.desc,
+          title: t(preset.desc),
           onclick: () => {
             config.style = preset.id;
             config.accent = preset.accent;
@@ -387,8 +407,8 @@ function buildAppearance() {
           h(
             'div',
             { class: 'style-name' },
-            h('span', { text: preset.name }),
-            h('span', { class: `style-form is-${preset.form}`, text: preset.form === 'list' ? '列表' : '网格' })
+            h('span', { text: t(preset.name) }),
+            h('span', { class: `style-form is-${preset.form}`, text: t(preset.form === 'list' ? '列表' : '网格') })
           )
         )
       )
@@ -398,12 +418,33 @@ function buildAppearance() {
   return h(
     'div',
     {},
-    group('视觉风格', h('div', { style: { padding: '13px 15px' } }, styleGrid, styleDesc)),
     group(
-      '色彩',
+      t('语言'),
       row(
-        '强调色',
-        '用于开关、焦点环与高亮状态',
+        t('界面语言'),
+        t('切换后立即生效；自动会跟随浏览器语言'),
+        makeSegmented(
+          [
+            { value: 'auto', label: t('自动（跟随浏览器）') },
+            { value: 'zh-CN', label: '简体中文' },
+            { value: 'en', label: 'English' },
+          ],
+          config.language || 'auto',
+          (value) => {
+            config.language = value;
+            touchNow();
+            setLocale(resolveLocale(value));
+            bus.emit('toast', { text: t('界面语言已切换') });
+          }
+        )
+      )
+    ),
+    group(t('视觉风格'), h('div', { style: { padding: '13px 15px' } }, styleGrid, styleDesc)),
+    group(
+      t('色彩'),
+      row(
+        t('强调色'),
+        t('用于开关、焦点环与高亮状态'),
         h(
           'div',
           { class: 'color-dots' },
@@ -412,7 +453,7 @@ function buildAppearance() {
               class: `color-dot${config.accent === color ? ' is-active' : ''}`,
               type: 'button',
               title: color,
-              'aria-label': `强调色 ${color}`,
+              'aria-label': t('强调色 {color}', { color }),
               'aria-pressed': String(config.accent === color),
               style: { background: color },
               onclick: (event) => {
@@ -429,7 +470,7 @@ function buildAppearance() {
           ),
           h(
             'label',
-            { class: 'color-picker', title: '自定义颜色' },
+            { class: 'color-picker', title: t('自定义颜色') },
             h('span', { html: svgIcon('plus', 13) }),
             h('input', {
               type: 'color',
@@ -450,13 +491,13 @@ function buildAppearance() {
         )
       ),
       row(
-        '文字色调',
-        '浅色壁纸上自动用深色文字；也可以手动锁定',
+        t('文字色调'),
+        t('浅色壁纸上自动用深色文字；也可以手动锁定'),
         makeSegmented(
           [
-            { value: 'auto', label: '自动' },
-            { value: 'dark', label: '浅色文字' },
-            { value: 'light', label: '深色文字' },
+            { value: 'auto', label: t('自动') },
+            { value: 'dark', label: t('浅色文字') },
+            { value: 'light', label: t('深色文字') },
           ],
           bg.tone || 'auto',
           (value) => {
@@ -468,10 +509,10 @@ function buildAppearance() {
       )
     ),
     group(
-      '质感',
+      t('质感'),
       row(
-        '毛玻璃模糊',
-        '数值越大越朦胧，性能开销也越高',
+        t('毛玻璃模糊'),
+        t('数值越大越朦胧，性能开销也越高'),
         makeRange({
           min: 0,
           max: 40,
@@ -484,8 +525,8 @@ function buildAppearance() {
         })
       ),
       row(
-        '圆角',
-        '0 为直角，36 接近胶囊',
+        t('圆角'),
+        t('0 为直角，36 接近胶囊'),
         makeRange({
           min: 0,
           max: 36,
@@ -498,8 +539,8 @@ function buildAppearance() {
         })
       ),
       row(
-        '界面缩放',
-        '放大或缩小主界面的文字与控件',
+        t('界面缩放'),
+        t('放大或缩小主界面的文字与控件'),
         makeRange({
           min: 0.8,
           max: 1.4,
@@ -514,14 +555,14 @@ function buildAppearance() {
       )
     ),
     group(
-      '图标',
+      t('图标'),
       row(
-        '图标样式',
-        '内置矢量图标离线可用、任意尺寸清晰；网站图标取自 Chrome 本地缓存',
+        t('图标样式'),
+        t('内置矢量图标离线可用、任意尺寸清晰；网站图标取自 Chrome 本地缓存'),
         makeSegmented(
           [
-            { value: 'brand', label: '品牌图标' },
-            { value: 'favicon', label: '网站图标' },
+            { value: 'brand', label: t('品牌图标') },
+            { value: 'favicon', label: t('网站图标') },
           ],
           config.layout.iconStyle || 'brand',
           (value) => {
@@ -532,18 +573,18 @@ function buildAppearance() {
       )
     ),
     group(
-      '效果',
+      t('效果'),
       row(
-        '动效',
-        '关闭后所有过渡动画立即完成',
+        t('动效'),
+        t('关闭后所有过渡动画立即完成'),
         makeSwitch(config.animations !== false, (value) => {
           config.animations = value;
           touch();
         })
       ),
       row(
-        '性能模式',
-        '关闭毛玻璃与壁纸漂移动画，减少合成开销；显卡驱动异常、页面卡顿时使用',
+        t('性能模式'),
+        t('关闭毛玻璃与壁纸漂移动画，减少合成开销；显卡驱动异常、页面卡顿时使用'),
         makeSwitch(config.performance === true, (value) => {
           config.performance = value;
           touch();
@@ -551,12 +592,14 @@ function buildAppearance() {
       )
     ),
     group(
-      '自定义字体',
+      t('自定义字体'),
       (() => {
         const current = config.customFont || { id: '', name: '' };
         const status = h('div', {
           class: 'field-hint',
-          text: current.id ? `当前：${current.name || '自定义字体'}` : '当前：系统字体',
+          text: current.id
+            ? t('当前：{name}', { name: current.name || t('自定义字体') })
+            : t('当前：系统字体'),
         });
         const picker = h('input', {
           type: 'file',
@@ -567,22 +610,22 @@ function buildAppearance() {
             event.target.value = '';
             if (!file) return;
             if (!/\.(woff2?|ttf|otf)$/i.test(file.name) && !/^font\//i.test(file.type)) {
-              bus.emit('toast', { text: '请选择 WOFF2 / WOFF / TTF / OTF 字体文件', error: true });
+              bus.emit('toast', { text: t('请选择 WOFF2 / WOFF / TTF / OTF 字体文件'), error: true });
               return;
             }
             if (file.size > 8 * 1024 * 1024) {
-              bus.emit('toast', { text: '字体文件超过 8 MB，请先压缩或裁剪字形', error: true });
+              bus.emit('toast', { text: t('字体文件超过 8 MB，请先压缩或裁剪字形'), error: true });
               return;
             }
             // 先让浏览器解析一遍：坏文件/伪装扩展名直接拒绝，不要先落盘再失败
             if (!(await canLoadFontFile(file))) {
-              bus.emit('toast', { text: '这个字体文件无法解析，请换一个文件', error: true });
+              bus.emit('toast', { text: t('这个字体文件无法解析，请换一个文件'), error: true });
               return;
             }
             const seq = ++fontUploadSeq;
             const id = `f${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
             if (!(await files.put(`font:${id}`, file))) {
-              bus.emit('toast', { text: '字体保存失败，请检查浏览器存储空间', error: true });
+              bus.emit('toast', { text: t('字体保存失败，请检查浏览器存储空间'), error: true });
               return;
             }
             if (seq !== fontUploadSeq) {
@@ -596,7 +639,7 @@ function buildAppearance() {
               config.customFont = previous;
               await applyCustomFont(store.state);
               await files.remove(`font:${id}`);
-              bus.emit('toast', { text: '字体加载失败，已保留原字体', error: true });
+              bus.emit('toast', { text: t('字体加载失败，已保留原字体'), error: true });
               return;
             }
             touchNow();
@@ -604,16 +647,16 @@ function buildAppearance() {
               config.customFont = previous;
               await applyCustomFont(store.state);
               await files.remove(`font:${id}`);
-              bus.emit('toast', { text: '字体保存失败：本地存储写入异常', error: true });
+              bus.emit('toast', { text: t('字体保存失败：本地存储写入异常'), error: true });
               return;
             }
             if (previous.id) await files.remove(`font:${previous.id}`);
             selectSection('appearance');
-            bus.emit('toast', { text: '已应用自定义字体' });
+            bus.emit('toast', { text: t('已应用自定义字体') });
           },
         });
         return row(
-          '字体',
+          t('字体'),
           status,
           h(
             'div',
@@ -621,14 +664,14 @@ function buildAppearance() {
             h('button', {
               class: 'btn',
               type: 'button',
-              html: `${svgIcon('upload', 14)}<span>${current.id ? '更换字体' : '选择字体'}</span>`,
+              html: `${svgIcon('upload', 14)}<span>${current.id ? t('更换字体') : t('选择字体')}</span>`,
               onclick: () => picker.click(),
             }),
             current.id
               ? h('button', {
                   class: 'btn is-ghost',
                   type: 'button',
-                  text: '恢复系统字体',
+                  text: t('恢复系统字体'),
                   onclick: async () => {
                     const previous = config.customFont;
                     config.customFont = { id: '', name: '' };
@@ -638,7 +681,7 @@ function buildAppearance() {
                       config.customFont = previous;
                       await applyCustomFont(store.state);
                       touchNow();
-                      bus.emit('toast', { text: '恢复系统字体失败：本地存储写入异常', error: true });
+                      bus.emit('toast', { text: t('恢复系统字体失败：本地存储写入异常'), error: true });
                       return;
                     }
                     if (previous.id) await files.remove(`font:${previous.id}`);
@@ -652,7 +695,7 @@ function buildAppearance() {
       })()
     ),
     group(
-      '主题预设',
+      t('主题预设'),
       (() => {
         const themeInput = h('input', {
           type: 'file',
@@ -665,31 +708,31 @@ function buildAppearance() {
             try {
               await importTheme(file);
               if (isOpen && activeTab === 'appearance') selectSection('appearance');
-              bus.emit('toast', { text: '主题已应用' });
+              bus.emit('toast', { text: t('主题已应用') });
             } catch (err) {
-              bus.emit('toast', { text: err.message || '主题导入失败', error: true });
+              bus.emit('toast', { text: err.message || t('主题导入失败'), error: true });
             }
           },
         });
         return row(
-          '分享外观',
-          '只导出风格、配色、圆角、滤镜与自定义 CSS，不含快捷方式和个人数据',
+          t('分享外观'),
+          t('只导出风格、配色、圆角、滤镜与自定义 CSS，不含快捷方式和个人数据'),
           h(
             'div',
             { class: 'btn-row' },
             h('button', {
               class: 'btn',
               type: 'button',
-              html: `${svgIcon('download', 14)}<span>导出主题</span>`,
+              html: `${svgIcon('download', 14)}<span>${t('导出主题')}</span>`,
               onclick: () => {
                 exportTheme();
-                bus.emit('toast', { text: '主题已导出' });
+                bus.emit('toast', { text: t('主题已导出') });
               },
             }),
             h('button', {
               class: 'btn is-ghost',
               type: 'button',
-              html: `${svgIcon('upload', 14)}<span>导入主题</span>`,
+              html: `${svgIcon('upload', 14)}<span>${t('导入主题')}</span>`,
               onclick: () => themeInput.click(),
             }),
             themeInput
@@ -698,10 +741,10 @@ function buildAppearance() {
       })()
     ),
     group(
-      '自定义 CSS',
+      t('自定义 CSS'),
       row(
-        '高级样式',
-        '立即生效并随配置一起备份。@import 会被移除；选择器写法可参考浏览器开发者工具。',
+        t('高级样式'),
+        t('立即生效并随配置一起备份。@import 会被移除；选择器写法可参考浏览器开发者工具。'),
         h(
           'div',
           { class: 'custom-css-editor' },
@@ -710,8 +753,8 @@ function buildAppearance() {
               class: 'text-input custom-css-input',
               maxlength: String(CUSTOM_CSS_MAX),
               spellcheck: 'false',
-              placeholder: '/* 例如 */\n.clock-time { letter-spacing: 0.02em; }',
-              'aria-label': '自定义 CSS',
+              placeholder: t('/* 例如 */\n.clock-time { letter-spacing: 0.02em; }'),
+              'aria-label': t('自定义 CSS'),
             });
             area.value = config.customCss || '';
             const count = h('span', {
@@ -721,7 +764,7 @@ function buildAppearance() {
             const clear = h('button', {
               class: 'btn is-ghost',
               type: 'button',
-              text: '清空',
+              text: t('清空'),
               disabled: !area.value.trim(),
             });
             // 20k 字符的样式表每敲一个字就重新解析会明显掉帧（实测 100–200ms），
@@ -766,7 +809,7 @@ function buildWallpaper() {
   const config = store.state.config;
   const bg = config.background;
 
-  const gallery = h('div', { class: 'swatch-grid', role: 'group', 'aria-label': '渐变预设' });
+  const gallery = h('div', { class: 'swatch-grid', role: 'group', 'aria-label': t('渐变预设') });
   for (const preset of GRADIENTS) {
     gallery.appendChild(
       h(
@@ -774,7 +817,7 @@ function buildWallpaper() {
         {
           class: `swatch${bg.gradient === preset.id && bg.type === 'gradient' ? ' is-active' : ''}${preset.tone === 'light' ? ' is-light' : ''}`,
           type: 'button',
-          title: preset.name,
+          title: t(preset.name),
           'aria-pressed': String(bg.gradient === preset.id && bg.type === 'gradient'),
           style: { backgroundImage: preset.css },
           'data-id': preset.id,
@@ -791,18 +834,18 @@ function buildWallpaper() {
             touch();
           },
         },
-        h('span', { text: preset.name })
+        h('span', { text: t(preset.name) })
       )
     );
   }
 
   const typeControl = makeSegmented(
     [
-      { value: 'gradient', label: '渐变' },
-      { value: 'bing', label: '必应' },
-      { value: 'url', label: '图片' },
-      { value: 'file', label: '本地' },
-      { value: 'color', label: '纯色' },
+      { value: 'gradient', label: t('渐变') },
+      { value: 'bing', label: t('必应') },
+      { value: 'url', label: t('图片') },
+      { value: 'file', label: t('本地') },
+      { value: 'color', label: t('纯色') },
     ],
     bg.type,
     (value) => {
@@ -819,12 +862,14 @@ function buildWallpaper() {
 
   if (bg.type === 'bing') {
     const gallery = h('div', { class: 'bing-gallery' });
-    const hint = h('div', { class: 'field-hint', text: '正在获取最近 8 天…' });
+    const hint = h('div', { class: 'field-hint', text: t('正在获取最近 8 天…') });
     // 换图后版权说明也要跟着变，否则会一直停在打开面板时那张
-    const currentLabel = h('span', { text: bg.bing?.copyright || '每天更新一张，来自 cn.bing.com 公开接口' });
+    const currentLabel = h('span', {
+    text: bg.bing?.copyright || t('每天更新一张，来自 cn.bing.com 公开接口'),
+  });
 
     const paint = () => {
-      currentLabel.textContent = bg.bing?.copyright || '每天更新一张，来自 cn.bing.com 公开接口';
+      currentLabel.textContent = bg.bing?.copyright || t('每天更新一张，来自 cn.bing.com 公开接口');
       Array.from(gallery.children).forEach((node) => {
         const active = Number(node.dataset.idx) === (bg.bing?.idx ?? 0);
         node.classList.toggle('is-active', active);
@@ -836,10 +881,10 @@ function buildWallpaper() {
       .then((items) => {
         clear(gallery);
         if (!items.length) {
-          hint.textContent = '没有取到壁纸，请检查网络后重试';
+          hint.textContent = t('没有取到壁纸，请检查网络后重试');
           return;
         }
-        hint.textContent = `最近 ${items.length} 天 · 点击任意一张即刻应用`;
+        hint.textContent = t('最近 {n} 天 · 点击任意一张即刻应用', { n: items.length });
         for (const item of items) {
           gallery.appendChild(
             h(
@@ -866,26 +911,26 @@ function buildWallpaper() {
                   paint();
                 },
               },
-              h('span', { class: 'bing-item__date', text: item.idx === 0 ? '今天' : item.date })
+              h('span', { class: 'bing-item__date', text: item.idx === 0 ? t('今天') : item.date })
             )
           );
         }
         paint();
       })
       .catch(() => {
-        hint.textContent = '获取失败，请检查网络后重试';
+        hint.textContent = t('获取失败，请检查网络后重试');
       });
 
     sourceRows.push(
       row(
-        '必应每日壁纸',
+        t('必应每日壁纸'),
         currentLabel,
         h(
           'button',
           {
             class: 'btn',
             type: 'button',
-            html: `${svgIcon('refresh', 14)}<span>随机一张</span>`,
+            html: `${svgIcon('refresh', 14)}<span>${t('随机一张')}</span>`,
             onclick: async () => {
               // 1..7 的随机步长 = 随机换到另外 7 天中的一张，不会原地不动
               await cycleBing(store.state, 1 + Math.floor(Math.random() * 7));
@@ -895,7 +940,12 @@ function buildWallpaper() {
           }
         )
       ),
-      row('历史壁纸', '必应保留最近 8 天，挑一张喜欢的固定下来', h('div', {}, gallery, hint), { stacked: true })
+      row(
+        t('历史壁纸'),
+        t('必应保留最近 8 天，挑一张喜欢的固定下来'),
+        h('div', {}, gallery, hint),
+        { stacked: true }
+      )
     );
   }
 
@@ -919,11 +969,13 @@ function buildWallpaper() {
         applyUrl();
       },
     });
-    sourceRows.push(row('图片地址', '支持任意可在浏览器中打开的图片链接', input, { stacked: true }));
+    sourceRows.push(
+      row(t('图片地址'), t('支持任意可在浏览器中打开的图片链接'), input, { stacked: true })
+    );
   }
 
   if (bg.type === 'file') {
-    const poolGrid = h('div', { class: 'wallpaper-pool', role: 'group', 'aria-label': '本地壁纸' });
+    const poolGrid = h('div', { class: 'wallpaper-pool', role: 'group', 'aria-label': t('本地壁纸') });
     const poolHint = h('div', { class: 'field-hint' });
     const maxSize = 24 * 1024 * 1024;
 
@@ -932,11 +984,14 @@ function buildWallpaper() {
       releaseWallpaperPoolUrls();
       const pool = Array.isArray(bg.pool) ? bg.pool : [];
       poolHint.textContent = pool.length
-        ? `${pool.length} / ${WALLPAPER_POOL_LIMIT} 张 · 点击缩略图立即应用`
-        : '还没有本地壁纸；一次可以选择多张';
+        ? t('{n} / {max} 张 · 点击缩略图立即应用', { n: pool.length, max: WALLPAPER_POOL_LIMIT })
+        : t('还没有本地壁纸；一次可以选择多张');
       if (!pool.length) {
         poolGrid.appendChild(
-          h('div', { class: 'wallpaper-pool-empty', text: '支持 JPG / PNG / WebP，单张不超过 24 MB' })
+          h('div', {
+            class: 'wallpaper-pool-empty',
+            text: t('支持 JPG / PNG / WebP，单张不超过 24 MB'),
+          })
         );
         return;
       }
@@ -944,7 +999,7 @@ function buildWallpaper() {
         const thumb = h('button', {
           class: 'pool-thumb',
           type: 'button',
-          'aria-label': `应用壁纸 ${entry.name}`,
+          'aria-label': t('应用壁纸 {name}', { name: entry.name }),
           'aria-pressed': String(bg.fileId === entry.id),
           title: entry.name,
           onclick: () => {
@@ -955,7 +1010,10 @@ function buildWallpaper() {
             paintPool();
           },
         });
-        const fallback = h('span', { class: 'pool-fallback', text: Array.from(entry.name || '图')[0] });
+        const fallback = h('span', {
+          class: 'pool-fallback',
+          text: Array.from(entry.name || t('图'))[0],
+        });
         thumb.appendChild(fallback);
         files
           .get(`wallpaper:${entry.id}`)
@@ -982,8 +1040,8 @@ function buildWallpaper() {
               h('button', {
                 class: 'pool-remove',
                 type: 'button',
-                text: '删除',
-                'aria-label': `删除壁纸 ${entry.name}`,
+                text: t('删除'),
+                'aria-label': t('删除壁纸 {name}', { name: entry.name }),
                 onclick: () => removeFromPool(entry),
               })
             )
@@ -1002,7 +1060,7 @@ function buildWallpaper() {
         Object.assign(bg, snapshot);
         applyBackground(store.state);
         touchNow();
-        bus.emit('toast', { text: '删除失败：本地存储写入异常', error: true });
+        bus.emit('toast', { text: t('删除失败：本地存储写入异常'), error: true });
         return;
       }
       await dropLocalWallpaper(entry.id);
@@ -1025,35 +1083,45 @@ function buildWallpaper() {
         if (!chosen.length) return;
         const room = WALLPAPER_POOL_LIMIT - bg.pool.length;
         if (room <= 0) {
-          bus.emit('toast', { text: `最多保存 ${WALLPAPER_POOL_LIMIT} 张本地壁纸`, error: true });
+          bus.emit('toast', {
+            text: t('最多保存 {max} 张本地壁纸', { max: WALLPAPER_POOL_LIMIT }),
+            error: true,
+          });
           return;
         }
         const batch = chosen.slice(0, room);
         if (chosen.length > room) {
-          bus.emit('toast', { text: `壁纸池已满，本次只添加前 ${room} 张`, error: true });
+          bus.emit('toast', { text: t('壁纸池已满，本次只添加前 {n} 张', { n: room }), error: true });
         }
         const seq = ++wallpaperUploadSeq;
         const snapshot = { pool: bg.pool.map((item) => ({ ...item })), fileId: bg.fileId, type: bg.type };
         const added = [];
         for (const file of batch) {
           if (!file.type.startsWith('image/')) {
-            bus.emit('toast', { text: `已跳过非图片文件：${file.name}`, error: true });
+            bus.emit('toast', { text: t('已跳过非图片文件：{name}', { name: file.name }), error: true });
             continue;
           }
           if (file.size > maxSize) {
-            bus.emit('toast', { text: `已跳过超过 24 MB 的文件：${file.name}`, error: true });
+            bus.emit('toast', {
+              text: t('已跳过超过 24 MB 的文件：{name}', { name: file.name }),
+              error: true,
+            });
             continue;
           }
           const id = await saveLocalWallpaper(file).catch(() => '');
           if (!id) {
-            bus.emit('toast', { text: '壁纸保存失败，请检查浏览器存储空间', error: true });
+            bus.emit('toast', { text: t('壁纸保存失败，请检查浏览器存储空间'), error: true });
             break;
           }
           if (seq !== wallpaperUploadSeq || store.state.config.background !== bg) {
             files.remove(`wallpaper:${id}`);
             break;
           }
-          added.push({ id, name: String(file.name || '本地壁纸').slice(0, 40), addedAt: Date.now() });
+          added.push({
+            id,
+            name: String(file.name || t('本地壁纸')).slice(0, 40),
+            addedAt: Date.now(),
+          });
         }
         if (!added.length) return;
         bg.pool = [...bg.pool, ...added];
@@ -1066,7 +1134,7 @@ function buildWallpaper() {
           await applyBackground(store.state);
           touchNow();
           for (const item of added) await files.remove(`wallpaper:${item.id}`);
-          bus.emit('toast', { text: '保存失败：本地存储写入异常', error: true });
+          bus.emit('toast', { text: t('保存失败：本地存储写入异常'), error: true });
           return;
         }
         // 保存大图可能耗时，用户可能已经切到别的分区；不要强行把他拽回壁纸页
@@ -1074,14 +1142,14 @@ function buildWallpaper() {
           selectSection('wallpaper');
           navEl.querySelector('.nav-item.is-active')?.focus({ preventScroll: true });
         }
-        bus.emit('toast', { text: `已添加 ${added.length} 张本地壁纸` });
+        bus.emit('toast', { text: t('已添加 {n} 张本地壁纸', { n: added.length }) });
       },
     });
 
     paintPool();
     sourceRows.push(
       row(
-        '本地壁纸池',
+        t('本地壁纸池'),
         poolHint,
         h(
           'div',
@@ -1089,14 +1157,14 @@ function buildWallpaper() {
           h('button', {
             class: 'btn',
             type: 'button',
-            html: `${svgIcon('upload', 14)}<span>添加图片</span>`,
+            html: `${svgIcon('upload', 14)}<span>${t('添加图片')}</span>`,
             disabled: bg.pool.length >= WALLPAPER_POOL_LIMIT,
             onclick: () => fileInput.click(),
           }),
           h('button', {
             class: 'btn is-ghost',
             type: 'button',
-            text: '全部删除',
+            text: t('全部删除'),
             disabled: !bg.pool.length,
             onclick: async () => {
               const entries = [...bg.pool];
@@ -1110,15 +1178,15 @@ function buildWallpaper() {
           fileInput
         )
       ),
-      row('壁纸', '点击缩略图切换当前壁纸', h('div', {}, poolGrid), { stacked: true })
+      row(t('壁纸'), t('点击缩略图切换当前壁纸'), h('div', {}, poolGrid), { stacked: true })
     );
   }
 
   if (bg.type === 'color') {
     sourceRows.push(
       row(
-        '纯色背景',
-        '最省资源的选择',
+        t('纯色背景'),
+        t('最省资源的选择'),
         h('input', {
           type: 'color',
           value: bg.color,
@@ -1136,12 +1204,15 @@ function buildWallpaper() {
   /* 遮罩强度按风格记忆：白纸/暗色材质各有自己的白雾或黑雾底线，
      用户在这里调低就能透出更多壁纸，其它风格保留各自的值。 */
   const styleId = config.style;
-  const styleName = styleById(styleId).name;
+  const styleLabel = t(styleById(styleId).name);
   const veilInactive = styleId === 'editorial' || styleId === 'terminal';
   const veilDefault = STYLE_VEIL[styleId] ?? 0;
   const veilHint = veilInactive
-    ? `「${styleName}」用整页实底铺满，遮罩不参与渲染`
-    : `「${styleName}」默认 ${veilDefault}%，各风格分别记忆；调低可透出更多壁纸`;
+    ? t('「{style}」用整页实底铺满，遮罩不参与渲染', { style: styleLabel })
+    : t('「{style}」默认 {value}%，各风格分别记忆；调低可透出更多壁纸', {
+        style: styleLabel,
+        value: veilDefault,
+      });
   const veilRange = makeRange({
     min: 0,
     max: 100,
@@ -1156,9 +1227,9 @@ function buildWallpaper() {
   const veilReset = h('button', {
     class: 'btn',
     type: 'button',
-    'aria-label': '恢复当前风格的默认遮罩强度',
-    title: '恢复当前风格的默认遮罩强度',
-    html: `${svgIcon('refresh', 13)}<span>默认</span>`,
+    'aria-label': t('恢复当前风格的默认遮罩强度'),
+    title: t('恢复当前风格的默认遮罩强度'),
+    html: `${svgIcon('refresh', 13)}<span>${t('默认')}</span>`,
     onclick: () => {
       const next = { ...bg.veilByStyle };
       delete next[styleId];
@@ -1182,21 +1253,21 @@ function buildWallpaper() {
     const rotationHint =
       bg.type === 'file'
         ? canRotate
-          ? `在 ${poolSize} 张本地壁纸间按顺序切换；新标签页模式每个新标签页换一张`
-          : '壁纸池里至少要有 2 张才能轮换'
+          ? t('在 {n} 张本地壁纸间按顺序切换；新标签页模式每个新标签页换一张', { n: poolSize })
+          : t('壁纸池里至少要有 2 张才能轮换')
         : bg.type === 'bing'
-          ? '在必应最近 8 天里切换；新标签页模式每个新标签页换一张'
-          : '在全部渐变预设间循环';
+          ? t('在必应最近 8 天里切换；新标签页模式每个新标签页换一张')
+          : t('在全部渐变预设间循环');
     rotationRows.push(
       row(
-        '轮换时机',
+        t('轮换时机'),
         rotationHint,
         makeSegmented(
           [
-            { value: 'off', label: '关闭' },
-            { value: 'newtab', label: '每个新标签页' },
-            { value: 'hour', label: '每小时' },
-            { value: 'day', label: '每天' },
+            { value: 'off', label: t('关闭') },
+            { value: 'newtab', label: t('每个新标签页') },
+            { value: 'hour', label: t('每小时') },
+            { value: 'day', label: t('每天') },
           ],
           bg.rotation || 'off',
           (value) => {
@@ -1207,12 +1278,12 @@ function buildWallpaper() {
         )
       ),
       row(
-        '立即更换',
-        canRotate ? '从当前来源里换到下一张，并重置轮换计时' : '先往壁纸池里再加一张',
+        t('立即更换'),
+        canRotate ? t('从当前来源里换到下一张，并重置轮换计时') : t('先往壁纸池里再加一张'),
         h('button', {
           class: 'btn',
           type: 'button',
-          text: '换一张',
+          text: t('换一张'),
           disabled: !canRotate,
           onclick: async () => {
             if (!rotateWallpaperNow(store.state)) return;
@@ -1229,14 +1300,14 @@ function buildWallpaper() {
   return h(
     'div',
     {},
-    group('来源', row('壁纸类型', '切换后立即应用', typeControl), ...sourceRows),
-    rotationRows.length ? group('轮换', ...rotationRows) : null,
-    bg.type === 'gradient' ? group('渐变预设', gallery) : null,
+    group(t('来源'), row(t('壁纸类型'), t('切换后立即应用'), typeControl), ...sourceRows),
+    rotationRows.length ? group(t('轮换'), ...rotationRows) : null,
+    bg.type === 'gradient' ? group(t('渐变预设'), gallery) : null,
     group(
-      '调整',
+      t('调整'),
       row(
-        '模糊',
-        '大数值会同时放大画面以消除边缘',
+        t('模糊'),
+        t('大数值会同时放大画面以消除边缘'),
         makeRange({
           min: 0,
           max: 30,
@@ -1250,7 +1321,7 @@ function buildWallpaper() {
         })
       ),
       row(
-        '亮度',
+        t('亮度'),
         '',
         makeRange({
           min: 30,
@@ -1265,7 +1336,7 @@ function buildWallpaper() {
         })
       ),
       row(
-        '饱和度',
+        t('饱和度'),
         '',
         makeRange({
           min: 0,
@@ -1280,13 +1351,13 @@ function buildWallpaper() {
         })
       ),
       row(
-        '风格遮罩',
+        t('风格遮罩'),
         veilHint,
         [veilRange, veilReset]
       ),
       row(
-        '暗角',
-        '四周轻微压暗，让中心内容更聚焦',
+        t('暗角'),
+        t('四周轻微压暗，让中心内容更聚焦'),
         makeSwitch(bg.vignette !== false, (value) => {
           bg.vignette = value;
           applyBackgroundLook(store.state);
@@ -1321,7 +1392,7 @@ function buildLayout() {
     class: 'text-input',
     type: 'text',
     value: layout.name || '',
-    placeholder: '留空则只显示问候语',
+    placeholder: t('留空则只显示问候语'),
     maxlength: '16',
     style: { width: '180px' },
     oninput: (event) => {
@@ -1337,20 +1408,23 @@ function buildLayout() {
     min: 3,
     max: 14,
     value: layout.columns,
-    format: (value) => `${value} 列`,
+    format: (value) => t('{value} 列', { value }),
     onInput: (value) => setColumns(value, 'slider'),
   });
   const columnsStepper = makeStepper({
     min: 3,
     max: 14,
     value: layout.columns,
-    label: '每行列数',
+    label: t('每行列数'),
     onChange: (value) => setColumns(value, 'stepper'),
   });
 
   function describeColumns(value) {
-    if (isList) return '文字列表不按列排布，切成图标网格后才生效';
-    return `当前 ${value} 列 · 内容宽约 ${dockWidth({ ...layout, columns: value })}px`;
+    if (isList) return t('文字列表不按列排布，切成图标网格后才生效');
+    return t('当前 {value} 列 · 内容宽约 {width}px', {
+      value,
+      width: dockWidth({ ...layout, columns: value }),
+    });
   }
 
   function setColumns(raw, source) {
@@ -1358,7 +1432,7 @@ function buildLayout() {
     layout.columns = value;
     if (source !== 'slider') {
       columnsRange.querySelector('input').value = String(value);
-      columnsRange.querySelector('.value').textContent = `${value} 列`;
+      columnsRange.querySelector('.value').textContent = t('{value} 列', { value });
     }
     columnsStepper.setValue(value);
     columnsHint.textContent = describeColumns(value);
@@ -1371,26 +1445,31 @@ function buildLayout() {
     'div',
     {},
     group(
-      '排列',
+      t('排列'),
       row(
-        '快捷方式形态',
+        t('快捷方式形态'),
         isList
-          ? `当前「${currentStyle.name}」是文字列表，列数与图标大小不生效`
-          : `当前「${currentStyle.name}」是图标网格，按 ${layout.columns} 列排列`,
+          ? t('当前「{style}」是文字列表，列数与图标大小不生效', { style: t(currentStyle.name) })
+          : t('当前「{style}」是图标网格，按 {columns} 列排列', {
+              style: t(currentStyle.name),
+              columns: layout.columns,
+            }),
         h('button', {
           class: 'btn',
           type: 'button',
-          html: `${svgIcon(isList ? 'grid' : 'list', 14)}<span>${isList ? '换成图标网格' : '换成文字列表'}</span>`,
+          html: `${svgIcon(isList ? 'grid' : 'list', 14)}<span>${
+            isList ? t('换成图标网格') : t('换成文字列表')
+          }</span>`,
           onclick: () => applyStyle(isList ? 'noir' : 'editorial'),
         })
       ),
       row(
-        '每行列数',
+        t('每行列数'),
         columnsHint,
         [columnsStepper, columnsRange]
       ),
       row(
-        '图标大小',
+        t('图标大小'),
         '',
         makeRange({
           min: 44,
@@ -1406,8 +1485,8 @@ function buildLayout() {
         })
       ),
       row(
-        '列间距',
-        '决定内容总宽：网格与搜索框同宽，改这一项两者一起变',
+        t('列间距'),
+        t('决定内容总宽：网格与搜索框同宽，改这一项两者一起变'),
         makeRange({
           min: 4,
           max: 64,
@@ -1421,8 +1500,8 @@ function buildLayout() {
         })
       ),
       row(
-        '行间距',
-        '行与行之间的垂直留白，与列间距互不影响',
+        t('行间距'),
+        t('行与行之间的垂直留白，与列间距互不影响'),
         makeRange({
           min: 4,
           max: 64,
@@ -1435,8 +1514,8 @@ function buildLayout() {
         })
       ),
       row(
-        '内容垂直居中',
-        '关闭后内容从上方开始排列',
+        t('内容垂直居中'),
+        t('关闭后内容从上方开始排列'),
         makeSwitch(layout.verticalCenter !== false, (value) => {
           layout.verticalCenter = value;
           touch();
@@ -1444,31 +1523,31 @@ function buildLayout() {
       )
     ),
     group(
-      '首屏元素',
-      row('时钟', '', makeSwitch(layout.showClock, (value) => { layout.showClock = value; touch({ render: true }); })),
-      row('日期', '', makeSwitch(layout.showDate, (value) => { layout.showDate = value; touch({ render: true }); })),
-      row('农历与节日', '', makeSwitch(layout.showLunar, (value) => { layout.showLunar = value; touch({ render: true }); })),
-      row('问候语', '', makeSwitch(layout.showGreeting, (value) => { layout.showGreeting = value; touch({ render: true }); })),
-      row('搜索框', '', makeSwitch(layout.showSearch, (value) => { layout.showSearch = value; touch(); })),
-      row('操作提示', '', makeSwitch(layout.showHint !== false, (value) => { layout.showHint = value; touch(); })),
-      row('天气', '', makeSwitch(layout.showWeather, (value) => { layout.showWeather = value; touch(); }))
+      t('首屏元素'),
+      row(t('时钟'), '', makeSwitch(layout.showClock, (value) => { layout.showClock = value; touch({ render: true }); })),
+      row(t('日期'), '', makeSwitch(layout.showDate, (value) => { layout.showDate = value; touch({ render: true }); })),
+      row(t('农历与节日'), '', makeSwitch(layout.showLunar, (value) => { layout.showLunar = value; touch({ render: true }); })),
+      row(t('问候语'), '', makeSwitch(layout.showGreeting, (value) => { layout.showGreeting = value; touch({ render: true }); })),
+      row(t('搜索框'), '', makeSwitch(layout.showSearch, (value) => { layout.showSearch = value; touch(); })),
+      row(t('操作提示'), '', makeSwitch(layout.showHint !== false, (value) => { layout.showHint = value; touch(); })),
+      row(t('天气'), '', makeSwitch(layout.showWeather, (value) => { layout.showWeather = value; touch(); }))
     ),
     group(
-      '时间',
-      row('24 小时制', '', makeSwitch(layout.clock24, (value) => { layout.clock24 = value; touch({ render: true }); })),
-      row('显示秒', '', makeSwitch(layout.showSeconds, (value) => { layout.showSeconds = value; touch({ render: true }); })),
-      row('称呼', '例如「小明」，会出现在问候语后面', nameInput)
+      t('时间'),
+      row(t('24 小时制'), '', makeSwitch(layout.clock24, (value) => { layout.clock24 = value; touch({ render: true }); })),
+      row(t('显示秒'), '', makeSwitch(layout.showSeconds, (value) => { layout.showSeconds = value; touch({ render: true }); })),
+      row(t('称呼'), t('例如「小明」，会出现在问候语后面'), nameInput)
     ),
     group(
-      '侧边栏',
+      t('侧边栏'),
       row(
-        '位置',
+        t('位置'),
         '',
         makeSegmented(
           [
-            { value: 'right', label: '右侧' },
-            { value: 'left', label: '左侧' },
-            { value: 'hidden', label: '隐藏' },
+            { value: 'right', label: t('右侧') },
+            { value: 'left', label: t('左侧') },
+            { value: 'hidden', label: t('隐藏') },
           ],
           config.sidebar,
           (value) => {
@@ -1553,17 +1632,20 @@ function buildShortcuts() {
   const behavior = config.behavior;
 
   const list = h('div', { class: 'link-list', style: { maxHeight: '320px' } });
-  const countTitle = h('div', { class: 'group-title', text: `快捷方式 · ${store.state.shortcuts.length}` });
+  const countTitle = h('div', {
+    class: 'group-title',
+    text: t('快捷方式 · {count}', { count: store.state.shortcuts.length }),
+  });
   let pendingFocus = null;
   const paint = () => {
     const scrollTop = list.scrollTop;
     clear(list);
-    countTitle.textContent = `快捷方式 · ${store.state.shortcuts.length}`;
+    countTitle.textContent = t('快捷方式 · {count}', { count: store.state.shortcuts.length });
     const items = [...store.state.shortcuts].sort((a, b) => a.order - b.order);
     const groupName = (id) => store.state.groups.find((group) => group.id === id)?.title;
 
     if (!items.length) {
-      list.appendChild(h('div', { class: 'empty-state', text: '还没有快捷方式' }));
+      list.appendChild(h('div', { class: 'empty-state', text: t('还没有快捷方式') }));
     }
 
     for (const item of items) {
@@ -1578,8 +1660,8 @@ function buildShortcuts() {
           h('button', {
             class: 'card-action',
             type: 'button',
-            title: '编辑',
-            'aria-label': `编辑${item.title}`,
+            title: t('编辑'),
+            'aria-label': t('编辑{title}', { title: item.title }),
             'data-item-id': item.id,
             'data-item-action': 'edit',
             html: svgIcon('edit', 13),
@@ -1594,17 +1676,17 @@ function buildShortcuts() {
           h('button', {
             class: 'card-action',
             type: 'button',
-            title: '删除',
-            'aria-label': `删除${item.title}`,
+            title: t('删除'),
+            'aria-label': t('删除{title}', { title: item.title }),
             'data-item-id': item.id,
             'data-item-action': 'delete',
             html: svgIcon('trash', 13),
             onclick: async () => {
               if (behavior.confirmDelete) {
                 const ok = await confirmDialog({
-                  title: '删除快捷方式',
-                  message: `确定删除「${item.title}」吗？`,
-                  confirmText: '删除',
+                  title: t('删除快捷方式'),
+                  message: t('确定删除「{title}」吗？', { title: item.title }),
+                  confirmText: t('删除'),
                   danger: true,
                 });
                 if (!ok) return;
@@ -1621,9 +1703,9 @@ function buildShortcuts() {
                 bodyEl.querySelector('.group .row .btn')?.focus({ preventScroll: true });
               }
               bus.emit('toast', {
-                text: `已删除「${item.title}」`,
+                text: t('已删除「{title}」', { title: item.title }),
                 action: {
-                  label: '撤销',
+                  label: t('撤销'),
                   onClick: () => {
                     store.restoreShortcut(snapshot);
                     if (list.isConnected) {
@@ -1665,14 +1747,14 @@ function buildShortcuts() {
     'div',
     {},
     group(
-      '行为',
+      t('行为'),
       row(
-        '打开方式',
+        t('打开方式'),
         '',
         makeSegmented(
           [
-            { value: 'new', label: '新标签页' },
-            { value: 'same', label: '当前标签页' },
+            { value: 'new', label: t('新标签页') },
+            { value: 'same', label: t('当前标签页') },
           ],
           behavior.shortcutsInNewTab ? 'new' : 'same',
           (value) => {
@@ -1682,8 +1764,8 @@ function buildShortcuts() {
         )
       ),
       row(
-        '删除前确认',
-        '关闭后按 Delete 会直接删除',
+        t('删除前确认'),
+        t('关闭后按 Delete 会直接删除'),
         makeSwitch(behavior.confirmDelete, (value) => {
           behavior.confirmDelete = value;
           touch();
@@ -1691,14 +1773,14 @@ function buildShortcuts() {
       )
     ),
     group(
-      '导入',
+      t('导入'),
       row(
-        '从浏览器书签导入',
-        '会把「书签栏」下的条目导入到一个新文件夹，重复执行会再次导入',
+        t('从浏览器书签导入'),
+        t('会把「书签栏」下的条目导入到一个新文件夹，重复执行会再次导入'),
         h('button', {
           class: 'btn',
           type: 'button',
-          html: `${svgIcon('bookmark', 14)}<span>开始导入</span>`,
+          html: `${svgIcon('bookmark', 14)}<span>${t('开始导入')}</span>`,
           onclick: () => importBookmarks(),
         })
       )
@@ -1745,8 +1827,8 @@ async function importBookmarks() {
   try {
     await runBookmarkImport();
   } catch (err) {
-    console.error('[serein/settings] 书签导入失败', err);
-    bus.emit('toast', { text: '书签导入失败，请重试', error: true });
+    console.error('[serein/settings] bookmark import failed', err);
+    bus.emit('toast', { text: t('书签导入失败，请重试'), error: true });
   } finally {
     bookmarkImporting = false;
   }
@@ -1755,7 +1837,7 @@ async function importBookmarks() {
 async function runBookmarkImport() {
   const granted = await requestPermission('bookmarks');
   if (!granted) {
-    bus.emit('toast', { text: '未获得书签权限', error: true });
+    bus.emit('toast', { text: t('未获得书签权限'), error: true });
     return;
   }
 
@@ -1780,12 +1862,12 @@ async function runBookmarkImport() {
   walk(bar?.children || [], 0);
 
   if (!collected.length) {
-    bus.emit('toast', { text: '没有找到可导入的书签', error: true });
+    bus.emit('toast', { text: t('没有找到可导入的书签'), error: true });
     return;
   }
 
-  const imported = store.importShortcuts('书签导入', collected);
-  bus.emit('toast', { text: `已导入 ${imported?.count || 0} 个书签` });
+  const imported = store.importShortcuts(t('书签导入'), collected);
+  bus.emit('toast', { text: t('已导入 {count} 个书签', { count: imported?.count || 0 }) });
   if (root && isOpen) {
     selectSection('shortcuts');
     // 「开始导入」按钮刚被重建掉了，把焦点交给新列表的第一个操作
@@ -1798,17 +1880,17 @@ async function runBookmarkImport() {
 function buildWidgets() {
   const widgets = store.state.config.widgets;
   const items = [
-    ['todo', '待办', '简单的勾选清单，数据本地保存'],
-    ['notes', '便签', '随手记，自动保存'],
-    ['bookmarks', '书签', '需要单独授权读取浏览器书签'],
-    ['topSites', '常去网站', '需要授权读取浏览记录中的高频站点'],
-    ['pomodoro', '专注计时', '25 分钟专注 + 5 分钟休息，状态跨标签页同步'],
-    ['worldClock', '世界时钟', '最多 6 个城市，点击卡片右上角选择'],
-    ['countdown', '倒计时', '为截止日期保留一个醒目的位置'],
+    ['todo', t('待办'), t('简单的勾选清单，数据本地保存')],
+    ['notes', t('便签'), t('随手记，自动保存')],
+    ['bookmarks', t('书签'), t('需要单独授权读取浏览器书签')],
+    ['topSites', t('常去网站'), t('需要授权读取浏览记录中的高频站点')],
+    ['pomodoro', t('专注计时'), t('25 分钟专注 + 5 分钟休息，状态跨标签页同步')],
+    ['worldClock', t('世界时钟'), t('最多 6 个城市，点击卡片右上角选择')],
+    ['countdown', t('倒计时'), t('为截止日期保留一个醒目的位置')],
   ];
 
   return group(
-    '侧边栏小组件',
+    t('侧边栏小组件'),
     ...items.map(([key, name, hint]) =>
       row(
         name,
@@ -1837,9 +1919,9 @@ function engineEditor(engine = null) {
       class: 'text-input',
       type: 'text',
       value: engine?.name || '',
-      placeholder: '例如：Perplexity',
+      placeholder: t('例如：Perplexity'),
       maxlength: String(CUSTOM_ENGINE_NAME_MAX),
-      'aria-label': '引擎名称',
+      'aria-label': t('引擎名称'),
       autocomplete: 'off',
     });
     const urlInput = h('input', {
@@ -1849,7 +1931,7 @@ function engineEditor(engine = null) {
       placeholder: 'https://www.perplexity.ai/search?q=%s',
       maxlength: '500',
       spellcheck: 'false',
-      'aria-label': '搜索地址模板',
+      'aria-label': t('搜索地址模板'),
       autocomplete: 'off',
     });
     const error = h('div', { class: 'field-error', role: 'alert', hidden: true });
@@ -1861,18 +1943,18 @@ function engineEditor(engine = null) {
     const body = h(
       'div',
       {},
-      h('div', { class: 'field' }, h('label', { text: '名称' }), nameInput),
+      h('div', { class: 'field' }, h('label', { text: t('名称') }), nameInput),
       h(
         'div',
         { class: 'field' },
-        h('label', { text: '搜索地址模板' }),
+        h('label', { text: t('搜索地址模板') }),
         urlInput,
         h(
           'div',
           { class: 'field-hint' },
-          '用 ',
+          t('用 '),
           h('code', { text: '%s' }),
-          ' 代表搜索词，例如 ',
+          t(' 代表搜索词，例如 '),
           h('code', { text: 'https://www.google.com/search?q=%s' })
         )
       ),
@@ -1884,18 +1966,18 @@ function engineEditor(engine = null) {
       const name = nameInput.value.trim();
       const url = urlInput.value.trim();
       if (!name) {
-        showError('请填写名称');
+        showError(t('请填写名称'));
         nameInput.focus();
         return;
       }
       if (!url.includes('%s')) {
-        showError('搜索地址必须包含 %s 占位符');
+        showError(t('搜索地址必须包含 %s 占位符'));
         urlInput.focus();
         return;
       }
       const next = sanitizeCustomEngine({ id: engine?.id, name, url });
       if (!next) {
-        showError('只支持 http(s) 完整地址，且必须能被浏览器打开');
+        showError(t('只支持 http(s) 完整地址，且必须能被浏览器打开'));
         urlInput.focus();
         return;
       }
@@ -1913,19 +1995,24 @@ function engineEditor(engine = null) {
     urlInput.addEventListener('keydown', onKeydown);
 
     modal = openModal({
-      title: engine ? '编辑搜索引擎' : '添加搜索引擎',
+      title: engine ? t('编辑搜索引擎') : t('添加搜索引擎'),
       body,
       footer: [
         h('button', {
           class: 'btn',
           type: 'button',
-          text: '取消',
+          text: t('取消'),
           onclick: () => {
             finish(null);
             modal.close();
           },
         }),
-        h('button', { class: 'btn is-primary', type: 'button', text: engine ? '保存' : '添加', onclick: submit }),
+        h('button', {
+          class: 'btn is-primary',
+          type: 'button',
+          text: engine ? t('保存') : t('添加'),
+          onclick: submit,
+        }),
       ],
       onClose: () => finish(null),
     });
@@ -1939,7 +2026,7 @@ function engineEditor(engine = null) {
 }
 
 function permissionRow(kind, name, hint) {
-  const status = h('span', { class: 'field-hint', text: '检测中…' });
+  const status = h('span', { class: 'field-hint', text: t('检测中…') });
   const actions = h('div', { class: 'btn-row' });
   const box = h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px' } }, status, actions);
 
@@ -1947,17 +2034,17 @@ function permissionRow(kind, name, hint) {
     if (!box.isConnected) return;
     clear(actions);
     if (!hasPermissionApi()) {
-      status.textContent = '安装扩展后可用';
+      status.textContent = t('安装扩展后可用');
       return;
     }
     if (granted) {
-      status.textContent = '已授权';
+      status.textContent = t('已授权');
       actions.appendChild(
         h('button', {
           class: 'btn is-ghost',
           type: 'button',
-          text: '撤销',
-          'aria-label': `撤销${name}权限`,
+          text: t('撤销'),
+          'aria-label': t('撤销{name}权限', { name }),
           onclick: async () => {
             await revokePermission(kind);
             selectSection('search');
@@ -1965,18 +2052,18 @@ function permissionRow(kind, name, hint) {
         })
       );
     } else {
-      status.textContent = '未授权';
+      status.textContent = t('未授权');
       actions.appendChild(
         h('button', {
           class: 'btn',
           type: 'button',
-          text: '授权',
-          'aria-label': `授权${name}`,
+          text: t('授权'),
+          'aria-label': t('授权{name}', { name }),
           onclick: async () => {
             // 直接调用 request，保留点击手势；授权后重建当前分区刷新状态
             const ok = await requestOptionalPermission(kind);
             bus.emit('toast', {
-              text: ok ? `已启用${name}搜索` : '未获得权限',
+              text: ok ? t('已启用{name}搜索', { name }) : t('未获得权限'),
               error: !ok,
             });
             selectSection('search');
@@ -1993,16 +2080,16 @@ function buildSearch() {
   const search = store.state.config.search;
   const recentCount = () => (Array.isArray(search.recent) ? search.recent.length : 0);
   const recentHint = h('span', {
-    text: `${recentCount()} 条，仅保存在本机；关掉上面的开关后不再新增`,
+    text: t('{n} 条，仅保存在本机；关掉上面的开关后不再新增', { n: recentCount() }),
   });
   const clearRecent = h('button', {
     class: 'btn',
     type: 'button',
-    text: '清除',
+    text: t('清除'),
     disabled: recentCount() === 0,
     onclick: () => {
       search.recent = [];
-      recentHint.textContent = '0 条，仅保存在本机；关掉上面的开关后不再新增';
+      recentHint.textContent = t('{n} 条，仅保存在本机；关掉上面的开关后不再新增', { n: 0 });
       clearRecent.disabled = true;
       touch();
     },
@@ -2014,7 +2101,7 @@ function buildSearch() {
     {
       class: 'swatch-grid',
       role: 'group',
-      'aria-label': '默认搜索引擎',
+      'aria-label': t('默认搜索引擎'),
       style: { gridTemplateColumns: 'repeat(auto-fill, minmax(112px, 1fr))' },
     },
     ...allEngines.map((engine) =>
@@ -2035,7 +2122,7 @@ function buildSearch() {
         },
         h('span', {
           class: 'engine-badge',
-          text: engine.letter,
+          text: engineLetter(engine),
           style: {
             background: engine.color,
             color: readableTextOn(engine.color),
@@ -2045,7 +2132,7 @@ function buildSearch() {
             borderRadius: '6px',
           },
         }),
-        h('span', { text: engine.name })
+        h('span', { text: engineName(engine) })
       )
     )
   );
@@ -2063,29 +2150,31 @@ function buildSearch() {
       (item) => item.id !== engine.id && item.url.toLowerCase() === draft.url.toLowerCase()
     );
     if (duplicate) {
-      bus.emit('toast', { text: '这个搜索地址已经添加过了', error: true });
+      bus.emit('toast', { text: t('这个搜索地址已经添加过了'), error: true });
       return;
     }
     saveEngines(customList.map((item) => (item.id === engine.id ? { ...item, ...draft, id: item.id } : item)));
   };
   const addEngine = async () => {
     if (customList.length >= CUSTOM_ENGINE_LIMIT) {
-      bus.emit('toast', { text: `最多添加 ${CUSTOM_ENGINE_LIMIT} 个自定义引擎`, error: true });
+      bus.emit('toast', { text: t('最多添加 {max} 个自定义引擎', { max: CUSTOM_ENGINE_LIMIT }), error: true });
       return;
     }
     const draft = await engineEditor();
     if (!draft) return;
     if (customList.some((item) => item.url.toLowerCase() === draft.url.toLowerCase())) {
-      bus.emit('toast', { text: '这个搜索地址已经添加过了', error: true });
+      bus.emit('toast', { text: t('这个搜索地址已经添加过了'), error: true });
       return;
     }
     saveEngines([...customList, draft]);
   };
   const removeEngine = async (engine) => {
     const ok = await confirmDialog({
-      title: '删除搜索引擎',
-      message: `确定删除「${engine.name}」吗？如果它是当前默认引擎，会切回百度。`,
-      confirmText: '删除',
+      title: t('删除搜索引擎'),
+      message: t('确定删除「{name}」吗？如果它是当前默认引擎，会切回百度。', {
+        name: engineName(engine),
+      }),
+      confirmText: t('删除'),
       danger: true,
     });
     if (!ok) return;
@@ -2103,31 +2192,36 @@ function buildSearch() {
         h('button', {
           class: 'btn is-ghost',
           type: 'button',
-          text: '编辑',
-          'aria-label': `编辑 ${engine.name}`,
+          text: t('编辑'),
+          'aria-label': t('编辑 {name}', { name: engine.name }),
           onclick: () => editEngine(engine),
         }),
         h('button', {
           class: 'btn is-ghost',
           type: 'button',
-          text: '删除',
-          'aria-label': `删除 ${engine.name}`,
+          text: t('删除'),
+          'aria-label': t('删除 {name}', { name: engine.name }),
           onclick: () => removeEngine(engine),
         })
       )
     )
   );
   if (!customRows.length) {
-    customRows.push(row('还没有自定义引擎', '可以接入公司内网搜索、垂直站点或自建搜索服务', null));
+    customRows.push(
+      row(t('还没有自定义引擎'), t('可以接入公司内网搜索、垂直站点或自建搜索服务'), null)
+    );
   }
   customRows.push(
     row(
-      '添加搜索引擎',
-      `${customList.length} / ${CUSTOM_ENGINE_LIMIT}；只影响本页搜索，不会改动浏览器默认引擎`,
+      t('添加搜索引擎'),
+      t('{n} / {max}；只影响本页搜索，不会改动浏览器默认引擎', {
+        n: customList.length,
+        max: CUSTOM_ENGINE_LIMIT,
+      }),
       h('button', {
         class: 'btn is-primary',
         type: 'button',
-        text: '添加引擎',
+        text: t('添加引擎'),
         disabled: customList.length >= CUSTOM_ENGINE_LIMIT,
         onclick: addEngine,
       })
@@ -2137,59 +2231,61 @@ function buildSearch() {
   return h(
     'div',
     {},
-    group('默认引擎', engineGrid),
-    group('自定义引擎', ...customRows),
+    group(t('默认引擎'), engineGrid),
+    group(t('自定义引擎'), ...customRows),
     group(
-      '命令面板',
+      t('命令面板'),
       permissionRow(
         'tabs',
-        '搜索打开的标签页',
-        '在搜索框输入「tab 关键词」；需要 tabs 权限，可随时撤销'
+        t('搜索打开的标签页'),
+        t('在搜索框输入「tab 关键词」；需要 tabs 权限，可随时撤销')
       ),
       permissionRow(
         'bookmarks',
-        '搜索书签',
-        '在搜索框输入「bookmark 关键词」；与书签小组件共用同一个可选权限'
+        t('搜索书签'),
+        t('在搜索框输入「bookmark 关键词」；与书签小组件共用同一个可选权限')
       ),
       permissionRow(
         'history',
-        '搜索浏览历史',
-        '在搜索框输入「history 关键词」；历史只在本机读取，不会上传'
+        t('搜索浏览历史'),
+        t('在搜索框输入「history 关键词」；历史只在本机读取，不会上传')
       ),
       h(
         'div',
         { class: 'info-block' },
-        '命令面板还支持 ',
-        h('code', { text: 'todo 买牛奶' }),
-        '、',
-        h('code', { text: 'note 记一句' }),
-        '、',
-        h('code', { text: 'copy 一段文字' }),
-        '，回车立即执行。'
+        t('命令面板还支持 '),
+        h('code', { text: t('todo 买牛奶') }),
+        t('、'),
+        h('code', { text: t('note 记一句') }),
+        t('、'),
+        h('code', { text: t('copy 一段文字') }),
+        t('，回车立即执行。')
       )
     ),
     group(
-      '联想与跳转',
+      t('联想与跳转'),
       row(
-        '搜索联想',
-        'Google / 必应 / 百度 / 360 / DuckDuckGo / 哔哩哔哩支持；仅在你输入时请求对应接口',
+        t('搜索联想'),
+        t('Google / 必应 / 百度 / 360 / DuckDuckGo / 哔哩哔哩支持；仅在你输入时请求对应接口'),
         makeSwitch(search.suggestions, (value) => {
           search.suggestions = value;
           touch();
         })
       ),
       row(
-        '记录最近搜索',
-        `聚焦搜索框时显示最近 ${RECENT_SEARCH_LIMIT} 条关键词；只保存在本机，不会上传`,
+        t('记录最近搜索'),
+        t('聚焦搜索框时显示最近 {max} 条关键词；只保存在本机，不会上传', {
+          max: RECENT_SEARCH_LIMIT,
+        }),
         makeSwitch(search.history, (value) => {
           search.history = value;
           touch();
         })
       ),
-      row('最近搜索记录', recentHint, clearRecent),
+      row(t('最近搜索记录'), recentHint, clearRecent),
       row(
-        '在新标签页打开结果',
-        '关闭后直接在当前新标签页里跳转',
+        t('在新标签页打开结果'),
+        t('关闭后直接在当前新标签页里跳转'),
         makeSwitch(search.openInNewTab, (value) => {
           search.openInNewTab = value;
           touch();
@@ -2197,13 +2293,15 @@ function buildSearch() {
       )
     ),
     group(
-      '说明',
+      t('说明'),
       h(
         'div',
         { class: 'info-block' },
         'Serein ',
-        h('strong', { text: '不会' }),
-        ' 修改浏览器的默认搜索引擎。这里的引擎只决定你在本页输入内容后跳转到哪个搜索地址 —— 这是刻意设计：修改默认搜索引擎会触发应用商店的额外审核。'
+        h('strong', { text: t('不会') }),
+        t(
+          ' 修改浏览器的默认搜索引擎。这里的引擎只决定你在本页输入内容后跳转到哪个搜索地址 —— 这是刻意设计：修改默认搜索引擎会触发应用商店的额外审核。'
+        )
       )
     )
   );
@@ -2213,15 +2311,18 @@ function buildSearch() {
 
 function buildData() {
   const meter = h('i', { style: { width: '0%' } });
-  const usageText = h('div', { class: 'field-hint', style: { marginTop: '8px' }, text: '统计中…' });
+  const usageText = h('div', { class: 'field-hint', style: { marginTop: '8px' }, text: t('统计中…') });
 
   usageReport().then((report) => {
     const total = report.configBytes + report.assetBytes;
     const pct = Math.min(100, (total / (5 * 1024 * 1024)) * 100);
     meter.style.width = `${Math.max(2, pct)}%`;
-    usageText.textContent = `配置 ${formatBytes(report.configBytes)} · 资产 ${report.assetCount} 个 / ${formatBytes(
-      report.assetBytes
-    )} · 更新于 ${relativeTime(store.state.meta.updatedAt)}`;
+    usageText.textContent = t('配置 {config} · 资产 {count} 个 / {assets} · 更新于 {time}', {
+      config: formatBytes(report.configBytes),
+      count: report.assetCount,
+      assets: formatBytes(report.assetBytes),
+      time: relativeTime(store.state.meta.updatedAt),
+    });
   });
 
   const importInput = h('input', {
@@ -2237,15 +2338,18 @@ function buildData() {
         refreshClock();
         bus.emit('toast', {
           text: result.assets
-            ? `已导入 ${result.count} 个快捷方式、${result.assets} 张图片`
-            : `已导入 ${result.count} 个快捷方式（旧格式备份不含图片）`,
+            ? t('已导入 {count} 个快捷方式、{assets} 张图片', {
+                count: result.count,
+                assets: result.assets,
+              })
+            : t('已导入 {count} 个快捷方式（旧格式备份不含图片）', { count: result.count }),
         });
         if (isOpen) {
           selectSection('data');
           navEl.querySelector('.nav-item.is-active')?.focus({ preventScroll: true });
         }
       } catch (err) {
-        bus.emit('toast', { text: `导入失败：${err.message}`, error: true });
+        bus.emit('toast', { text: t('导入失败：{message}', { message: err.message }), error: true });
       }
       event.target.value = '';
     },
@@ -2255,36 +2359,39 @@ function buildData() {
     'div',
     {},
     group(
-      '备份',
+      t('备份'),
       row(
-        '导出配置',
-        '生成 zip 备份：配置、快捷方式、待办、最近搜索，以及上传的壁纸、图标和字体',
+        t('导出配置'),
+        t('生成 zip 备份：配置、快捷方式、待办、最近搜索，以及上传的壁纸、图标和字体'),
         h('button', {
           class: 'btn',
           type: 'button',
-          html: `${svgIcon('download', 14)}<span>导出</span>`,
+          html: `${svgIcon('download', 14)}<span>${t('导出')}</span>`,
           onclick: async () => {
             try {
               const result = await exportState();
               bus.emit('toast', {
-                text: `已导出备份（含 ${result.assetCount} 张图片，${formatBytes(result.bytes)}）`,
+                text: t('已导出备份（含 {count} 张图片，{size}）', {
+                  count: result.assetCount,
+                  size: formatBytes(result.bytes),
+                }),
               });
             } catch (err) {
-              bus.emit('toast', { text: `导出失败：${err.message}`, error: true });
+              bus.emit('toast', { text: t('导出失败：{message}', { message: err.message }), error: true });
             }
           },
         })
       ),
       row(
-        '导入配置',
-        '支持新的 zip 备份（含图片）与旧版 JSON 备份；会覆盖现有配置、快捷方式、待办与便签',
+        t('导入配置'),
+        t('支持新的 zip 备份（含图片）与旧版 JSON 备份；会覆盖现有配置、快捷方式、待办与便签'),
         h(
           'div',
           { style: { display: 'flex', alignItems: 'center' } },
           h('button', {
             class: 'btn',
             type: 'button',
-            html: `${svgIcon('upload', 14)}<span>选择文件</span>`,
+            html: `${svgIcon('upload', 14)}<span>${t('选择文件')}</span>`,
             onclick: () => importInput.click(),
           }),
           importInput
@@ -2292,42 +2399,42 @@ function buildData() {
       )
     ),
     group(
-      '存储',
-      row('本地占用', '', h('div', { style: { width: '100%', maxWidth: '260px' } }, h('div', { class: 'meter' }, meter), usageText), {
+      t('存储'),
+      row(t('本地占用'), '', h('div', { style: { width: '100%', maxWidth: '260px' } }, h('div', { class: 'meter' }, meter), usageText), {
         stacked: true,
       })
     ),
     group(
-      '危险操作',
+      t('危险操作'),
       row(
-        '恢复默认设置',
-        '会清空快捷方式、待办、便签与上传的图片',
+        t('恢复默认设置'),
+        t('会清空快捷方式、待办、便签与上传的图片'),
         h('button', {
           class: 'btn is-danger',
           type: 'button',
-          text: '重置',
+          text: t('重置'),
           onclick: async () => {
             const ok = await confirmDialog({
-              title: '恢复默认设置',
-              message: '所有自定义内容都会被删除，且无法恢复。确定继续吗？',
-              confirmText: '确认重置',
+              title: t('恢复默认设置'),
+              message: t('所有自定义内容都会被删除，且无法恢复。确定继续吗？'),
+              confirmText: t('确认重置'),
               danger: true,
             });
             if (!ok) return;
             await resetAll();
-            bus.emit('toast', { text: '已恢复默认设置' });
+            bus.emit('toast', { text: t('已恢复默认设置') });
             setTimeout(() => location.reload(), 400);
           },
         })
       )
     ),
     group(
-      '隐私',
+      t('隐私'),
       h(
         'div',
         { class: 'info-block' },
-        h('strong', { text: '没有账号，没有云端，没有联盟链接。' }),
-        ' 所有配置存在浏览器本地（localStorage + IndexedDB）；图标链接绝不会被改写为推广链接；扩展不会上传任何浏览数据。'
+        h('strong', { text: t('没有账号，没有云端，没有联盟链接。') }),
+        t(' 所有配置存在浏览器本地（localStorage + IndexedDB）；图标链接绝不会被改写为推广链接；扩展不会上传任何浏览数据。')
       )
     )
   );
@@ -2362,11 +2469,11 @@ function buildAbout() {
     h(
       'table',
       { class: 'perm-table' },
-      h('thead', {}, h('tr', {}, ...headers.map((text) => h('th', { text })))),
+      h('thead', {}, h('tr', {}, ...headers.map((text) => h('th', { text: t(text) })))),
       h(
         'tbody',
         {},
-        ...rows.map((cells) => h('tr', {}, ...cells.map((text) => h('td', { text }))))
+        ...rows.map((cells) => h('tr', {}, ...cells.map((text) => h('td', { text: t(text) }))))
       )
     );
 
@@ -2374,48 +2481,60 @@ function buildAbout() {
     'div',
     {},
     group(
-      '版本',
+      t('版本'),
       row(
-        `${APP.name} ${APP.subtitle}`,
-        `v${APP.version} · 数据格式 v${APP.schema} · 零依赖纯前端实现`,
+        `${APP.name} ${t(APP.subtitle)}`,
+        t('v{version} · 数据格式 v{schema} · 零依赖纯前端实现', {
+          version: APP.version,
+          schema: APP.schema,
+        }),
         h('button', {
           class: 'btn',
           type: 'button',
-          html: `${svgIcon('keyboard', 14)}<span>快捷键</span>`,
+          html: `${svgIcon('keyboard', 14)}<span>${t('快捷键')}</span>`,
           onclick: () => showShortcuts(),
         })
       )
     ),
     group(
-      '权限清单',
+      t('权限清单'),
       h(
         'div',
         { class: 'info-block' },
-        '常驻 3 个基础权限（下表前三项）与 9 个固定服务域名（见「网络请求」）；没有 <all_urls>，没有远程代码。'
+        t(
+          '常驻 3 个基础权限（下表前三项）与 9 个固定服务域名（见「网络请求」）；没有 <all_urls>，没有远程代码。'
+        )
       ),
       h(
         'div',
         { class: 'info-block', style: { padding: '4px 0', background: 'transparent', border: 'none' } },
-        table(PERMISSIONS, ['权限', '用途说明'])
+        table(PERMISSIONS, [t('权限'), t('用途说明')])
       )
     ),
-    group('网络请求', h('div', { class: 'info-block', style: { padding: '4px 0', background: 'transparent', border: 'none' } }, table(NETWORK, ['域名', '用途']))),
     group(
-      '许可与致谢',
+      t('网络请求'),
+      h(
+        'div',
+        { class: 'info-block', style: { padding: '4px 0', background: 'transparent', border: 'none' } },
+        table(NETWORK, [t('域名'), t('用途')])
+      )
+    ),
+    group(
+      t('许可与致谢'),
       h(
         'div',
         { class: 'info-block' },
-        '本扩展为净室实现，未包含任何 GPL / AGPL 项目的代码。',
+        t('本扩展为净室实现，未包含任何 GPL / AGPL 项目的代码。'),
         h('br'),
         h('br'),
-        '天气数据由 ',
+        t('天气数据由 '),
         h('strong', { text: 'Open-Meteo' }),
-        ' 提供（免费层仅限非商业用途）；每日壁纸来自 ',
-        h('strong', { text: '必应' }),
-        ' 公开接口，版权归原作者，仅用于个人桌面欣赏。',
+        t(' 提供（免费层仅限非商业用途）；每日壁纸来自 '),
+        h('strong', { text: t('必应') }),
+        t(' 公开接口，版权归原作者，仅用于个人桌面欣赏。'),
         h('br'),
         h('br'),
-        '如果你想商用：请替换天气源为 QWeather 等服务，并把壁纸改为完全自有的素材。'
+        t('如果你想商用：请替换天气源为 QWeather 等服务，并把壁纸改为完全自有的素材。')
       )
     )
   );
@@ -2425,18 +2544,18 @@ function showShortcuts() {
   const isMac = /mac|iphone|ipad/i.test(navigator.platform || navigator.userAgent);
   const mod = isMac ? '⌘' : 'Ctrl';
   const rows = [
-    [`${mod} + K`, '聚焦搜索框'],
-    ['/', '聚焦搜索框（非输入状态）'],
-    [`${mod} + ,`, '打开设置'],
-    ['Esc', '关闭浮层 / 收起联想（搜索框里再按一次清空）'],
-    ['↑ ↓', '在搜索结果间移动'],
-    ['Tab', '收起联想并离开搜索框'],
-    ['← → ↑ ↓', '在图标间移动焦点'],
-    ['Enter', '打开选中的图标'],
-    ['F2', '编辑选中的图标'],
-    ['Delete', '删除选中的图标'],
-    ['中键 / ' + mod + ' + 点击', '在后台新标签页打开'],
-    ['Shift + 点击', '在前台新标签页打开'],
+    [`${mod} + K`, t('聚焦搜索框')],
+    ['/', t('聚焦搜索框（非输入状态）')],
+    [`${mod} + ,`, t('打开设置')],
+    ['Esc', t('关闭浮层 / 收起联想（搜索框里再按一次清空）')],
+    ['↑ ↓', t('在搜索结果间移动')],
+    ['Tab', t('收起联想并离开搜索框')],
+    ['← → ↑ ↓', t('在图标间移动焦点')],
+    ['Enter', t('打开选中的图标')],
+    ['F2', t('编辑选中的图标')],
+    ['Delete', t('删除选中的图标')],
+    [t('中键 / ') + mod + t(' + 点击'), t('在后台新标签页打开')],
+    [t('Shift + 点击'), t('在前台新标签页打开')],
   ];
 
   const body = h(
@@ -2447,7 +2566,7 @@ function showShortcuts() {
     )
   );
 
-  openModal({ title: '快捷键', body, footer: [] });
+  openModal({ title: t('快捷键'), body, footer: [] });
 }
 
 /* --------------------------------------------------------------- 注册 */

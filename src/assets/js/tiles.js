@@ -10,6 +10,7 @@ import * as store from './store.js';
 import { resolveIcon, isFaviconPlaceholder, isKnownPlaceholder } from './icons.js';
 import { files, trackObjectUrl } from './storage.js';
 import { openMenu } from './menu.js';
+import { t } from './i18n.js';
 
 /* 编辑弹窗按需加载：首屏只有网格，不需要这 20 KB */
 let modalsPromise = null;
@@ -362,22 +363,22 @@ function buildAddTile(index) {
     type: 'button',
     'data-kind': 'add',
     'data-host': '',
-    title: '添加内容',
+    title: t('添加内容'),
     style: { '--i': String(staggerDelay(index)) },
   });
   tile.appendChild(h('div', { class: 'tile-icon', 'aria-hidden': 'true', html: svgIcon('plus', 24) }));
-  tile.appendChild(h('div', { class: 'tile-label', text: '添加' }));
+  tile.appendChild(h('div', { class: 'tile-label', text: t('添加') }));
 
   tile.addEventListener('click', () => {
     const rect = tile.getBoundingClientRect();
     openMenu(
       [
-        { label: '添加快捷方式', icon: 'plus', onClick: () => addShortcut() },
-        { label: '新建文件夹', icon: 'folder-plus', onClick: () => createFolder() },
+        { label: t('添加快捷方式'), icon: 'plus', onClick: () => addShortcut() },
+        { label: t('新建文件夹'), icon: 'folder-plus', onClick: () => createFolder() },
         { type: 'sep' },
-        { label: '从书签导入', icon: 'bookmark', onClick: () => bus.emit('openSettings', { tab: 'shortcuts' }) },
-        { label: '更换壁纸', icon: 'image', onClick: () => bus.emit('openSettings', { tab: 'wallpaper' }) },
-        { label: '打开设置', icon: 'settings', shortcut: 'Ctrl+,', onClick: () => bus.emit('openSettings', {}) },
+        { label: t('从书签导入'), icon: 'bookmark', onClick: () => bus.emit('openSettings', { tab: 'shortcuts' }) },
+        { label: t('更换壁纸'), icon: 'image', onClick: () => bus.emit('openSettings', { tab: 'wallpaper' }) },
+        { label: t('打开设置'), icon: 'settings', shortcut: 'Ctrl+,', onClick: () => bus.emit('openSettings', {}) },
       ],
       { x: rect.left, y: rect.bottom + 8 }
     );
@@ -414,6 +415,13 @@ export function initTiles() {
   });
 }
 
+/** 语言切换后强制重建网格（「添加」磁贴与空状态文案） */
+export function refreshTilesLocale() {
+  if (!gridEl) return;
+  gridSignature = '';
+  renderGrid();
+}
+
 export function renderGrid() {
   if (!gridEl) return;
 
@@ -446,10 +454,10 @@ export function renderGrid() {
       h(
         'div',
         { class: 'grid-empty' },
-        h('div', { class: 'grid-empty-title', text: '从一个图标开始' }),
+        h('div', { class: 'grid-empty-title', text: t('从一个图标开始') }),
         h('div', {
           class: 'grid-empty-text',
-          text: '点下面的「+」添加第一个网站；右键空白处也能新建文件夹或更换壁纸。',
+          text: t('点下面的「+」添加第一个网站；右键空白处也能新建文件夹或更换壁纸。'),
         })
       )
     );
@@ -573,9 +581,9 @@ async function deleteShortcut(item) {
   if (store.state.config.behavior.confirmDelete) {
     const { confirmDialog } = await modals();
     const ok = await confirmDialog({
-      title: '删除快捷方式',
-      message: `确定要删除「${item.title}」吗？删除后 6 秒内可以撤销。`,
-      confirmText: '删除',
+      title: t('删除快捷方式'),
+      message: t('确定要删除「{title}」吗？删除后 6 秒内可以撤销。', { title: item.title }),
+      confirmText: t('删除'),
       danger: true,
     });
     if (!ok) return;
@@ -584,9 +592,9 @@ async function deleteShortcut(item) {
   if (!store.removeShortcut(item.id)) return;
   focusShortcutTile(item);
   bus.emit('toast', {
-    text: `已删除「${item.title}」`,
+    text: t('已删除「{title}」', { title: item.title }),
     action: {
-      label: '撤销',
+      label: t('撤销'),
       onClick: () => {
         store.restoreShortcut(snapshot);
         focusShortcutTile(snapshot);
@@ -598,26 +606,26 @@ async function deleteShortcut(item) {
 export async function createFolder(itemId = null) {
   const { promptDialog } = await modals();
   const title = await promptDialog({
-    title: '新建文件夹',
-    label: '文件夹名称',
-    value: '新建文件夹',
-    confirmText: '创建',
+    title: t('新建文件夹'),
+    label: t('文件夹名称'),
+    value: t('新建文件夹'),
+    confirmText: t('创建'),
   });
   if (!title) return;
   const group = store.addGroup(title);
   if (itemId) store.moveShortcutToGroup(itemId, group.id);
   if (document.querySelector('.modal.is-open .folder-grid')) focusShortcutTile({});
   else focusGridTile('group', group.id);
-  bus.emit('toast', { text: `已创建「${group.title}」` });
+  bus.emit('toast', { text: t('已创建「{title}」', { title: group.title }) });
 }
 
 async function renameFolder(group) {
   const { promptDialog } = await modals();
   const title = await promptDialog({
-    title: '重命名文件夹',
-    label: '文件夹名称',
+    title: t('重命名文件夹'),
+    label: t('文件夹名称'),
     value: group.title,
-    confirmText: '保存',
+    confirmText: t('保存'),
   });
   if (!title) return;
   store.renameGroup(group.id, title);
@@ -628,9 +636,12 @@ async function deleteFolder(group) {
   const { confirmDialog } = await modals();
   const initialItems = store.groupItems(group.id);
   const ok = await confirmDialog({
-    title: '删除文件夹',
-    message: `「${group.title}」及其中的 ${initialItems.length} 个图标都会被删除，删除后 6 秒内可以撤销。`,
-    confirmText: '删除',
+    title: t('删除文件夹'),
+    message: t('「{title}」及其中的 {n} 个图标都会被删除，删除后 6 秒内可以撤销。', {
+      title: group.title,
+      n: initialItems.length,
+    }),
+    confirmText: t('删除'),
     danger: true,
   });
   if (!ok) return;
@@ -640,9 +651,9 @@ async function deleteFolder(group) {
   store.removeGroup(group.id, { keepItems: false });
   focusFirstGridTile();
   bus.emit('toast', {
-    text: `已删除「${group.title}」`,
+    text: t('已删除「{title}」', { title: group.title }),
     action: {
-      label: '撤销',
+      label: t('撤销'),
       onClick: () => {
         store.restoreGroup(snapshot, items);
         focusGridTile('group', snapshot.id);
@@ -669,19 +680,19 @@ function openShortcutMenu(item, event) {
         store.moveShortcutToGroup(item.id, group.id);
         if (document.querySelector('.modal.is-open .folder-grid')) focusShortcutTile(item);
         else focusGridTile('group', group.id);
-        bus.emit('toast', { text: `已移动到「${group.title}」` });
+        bus.emit('toast', { text: t('已移动到「{title}」', { title: group.title }) });
       },
     }));
 
   const entries = [
-    { label: '打开', icon: 'external', onClick: () => openShortcut(item.url) },
+    { label: t('打开'), icon: 'external', onClick: () => openShortcut(item.url) },
     { type: 'sep' },
-    { label: '编辑…', icon: 'edit', shortcut: 'F2', onClick: () => editShortcut(item) },
+    { label: t('编辑…'), icon: 'edit', shortcut: 'F2', onClick: () => editShortcut(item) },
   ];
 
   if (item.groupId) {
     entries.push({
-      label: '移出文件夹',
+      label: t('移出文件夹'),
       icon: 'arrowLeft',
       onClick: () => {
         store.moveShortcutToGroup(item.id, null);
@@ -692,10 +703,10 @@ function openShortcutMenu(item, event) {
 
   if (moveItems.length) {
     entries.push({
-      label: '移动到文件夹',
+      label: t('移动到文件夹'),
       icon: 'folder',
       onClick: () => {
-        openMenu([{ type: 'label', label: '移动到' }, ...moveItems], {
+        openMenu([{ type: 'label', label: t('移动到') }, ...moveItems], {
           x: Math.min(anchorRect.right + 6, window.innerWidth - 230),
           y: anchorRect.top,
         });
@@ -703,9 +714,9 @@ function openShortcutMenu(item, event) {
     });
   }
 
-  entries.push({ label: '新建文件夹并移入', icon: 'folder-plus', onClick: () => createFolder(item.id) });
+  entries.push({ label: t('新建文件夹并移入'), icon: 'folder-plus', onClick: () => createFolder(item.id) });
   entries.push({ type: 'sep' });
-  entries.push({ label: '删除', icon: 'trash', danger: true, onClick: () => deleteShortcut(item) });
+  entries.push({ label: t('删除'), icon: 'trash', danger: true, onClick: () => deleteShortcut(item) });
 
   openMenu(entries, { x: event.clientX, y: event.clientY });
 }
@@ -714,11 +725,11 @@ function openFolderMenu(group, event) {
   event.currentTarget.focus?.({ preventScroll: true });
   openMenu(
     [
-      { label: '打开文件夹', icon: 'folder', onClick: () => openFolder(group.id) },
-      { label: '重命名…', icon: 'edit', onClick: () => renameFolder(group) },
+      { label: t('打开文件夹'), icon: 'folder', onClick: () => openFolder(group.id) },
+      { label: t('重命名…'), icon: 'edit', onClick: () => renameFolder(group) },
       { type: 'sep' },
       {
-        label: '解散（图标移出）',
+        label: t('解散（图标移出）'),
         icon: 'folder',
         onClick: () => {
           const snapshot = { ...group };
@@ -726,9 +737,9 @@ function openFolderMenu(group, event) {
           store.removeGroup(group.id, { keepItems: true });
           focusFirstGridTile();
           bus.emit('toast', {
-            text: '文件夹已解散，图标已移回主面板',
+            text: t('文件夹已解散，图标已移回主面板'),
             action: {
-              label: '撤销',
+              label: t('撤销'),
               onClick: () => {
                 store.restoreGroup(snapshot, nested, { reassign: true });
                 focusGridTile('group', snapshot.id);
@@ -738,7 +749,7 @@ function openFolderMenu(group, event) {
         },
       },
       {
-        label: '删除文件夹及其内容',
+        label: t('删除文件夹及其内容'),
         icon: 'trash',
         danger: true,
         onClick: () => deleteFolder(group),
@@ -751,12 +762,12 @@ function openFolderMenu(group, event) {
 function openCanvasMenu(event) {
   openMenu(
     [
-      { label: '添加快捷方式', icon: 'plus', onClick: () => addShortcut() },
-      { label: '新建文件夹', icon: 'folder-plus', onClick: () => createFolder() },
+      { label: t('添加快捷方式'), icon: 'plus', onClick: () => addShortcut() },
+      { label: t('新建文件夹'), icon: 'folder-plus', onClick: () => createFolder() },
       { type: 'sep' },
-      { label: '更换壁纸', icon: 'image', onClick: () => bus.emit('openSettings', { tab: 'wallpaper' }) },
-      { label: '调整布局', icon: 'grid', onClick: () => bus.emit('openSettings', { tab: 'layout' }) },
-      { label: '设置', icon: 'settings', shortcut: 'Ctrl+,', onClick: () => bus.emit('openSettings', {}) },
+      { label: t('更换壁纸'), icon: 'image', onClick: () => bus.emit('openSettings', { tab: 'wallpaper' }) },
+      { label: t('调整布局'), icon: 'grid', onClick: () => bus.emit('openSettings', { tab: 'layout' }) },
+      { label: t('设置'), icon: 'settings', shortcut: 'Ctrl+,', onClick: () => bus.emit('openSettings', {}) },
     ],
     { x: event.clientX, y: event.clientY }
   );
@@ -797,7 +808,7 @@ async function openFolder(groupId) {
       class: 'tile tile--add',
       type: 'button',
       'data-kind': 'add',
-      title: '添加到文件夹',
+      title: t('添加到文件夹'),
       onclick: async () => {
         const result = await shortcutEditor({ groups: store.state.groups, defaultGroupId: groupId });
         // 编辑器默认就带上 defaultGroupId，addShortcut 会直接放进当前文件夹
@@ -808,7 +819,7 @@ async function openFolder(groupId) {
       },
     });
     addTile.appendChild(h('div', { class: 'tile-icon', html: svgIcon('plus', 22) }));
-    addTile.appendChild(h('div', { class: 'tile-label', text: '添加' }));
+    addTile.appendChild(h('div', { class: 'tile-label', text: t('添加') }));
     grid.appendChild(addTile);
     if (activeKind === 'add') {
       addTile.focus({ preventScroll: true });
@@ -855,24 +866,24 @@ async function openFolder(groupId) {
       h('button', {
         class: 'btn is-ghost',
         type: 'button',
-        text: '重命名',
+        text: t('重命名'),
         style: { marginRight: 'auto' },
         onclick: async () => {
           const title = await promptDialog({
-            title: '重命名文件夹',
-            label: '文件夹名称',
+            title: t('重命名文件夹'),
+            label: t('文件夹名称'),
             value: group.title,
-            confirmText: '保存',
+            confirmText: t('保存'),
           });
           if (!title) return;
           store.renameGroup(groupId, title);
-          const finalTitle = store.state.groups.find((g) => g.id === groupId)?.title || '文件夹';
+          const finalTitle = store.state.groups.find((g) => g.id === groupId)?.title || t('文件夹');
           const heading = modal.card.querySelector('.modal-title');
           if (heading) heading.textContent = finalTitle;
           modal.card.setAttribute('aria-label', finalTitle);
         },
       }),
-      h('button', { class: 'btn is-primary', type: 'button', text: '完成', onclick: () => modal.close() }),
+      h('button', { class: 'btn is-primary', type: 'button', text: t('完成'), onclick: () => modal.close() }),
     ],
   });
 

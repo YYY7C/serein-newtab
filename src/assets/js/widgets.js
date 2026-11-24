@@ -4,10 +4,12 @@
  * 都不会因为其他状态变化而丢失焦点。
  */
 
-import { $, h, clear, svgIcon, debounce, relativeTime, normalizeUrl, isUsableUrl, bus } from './util.js';
+import { $, h, clear, uid, svgIcon, debounce, relativeTime, normalizeUrl, isUsableUrl, bus } from './util.js';
 import * as store from './store.js';
 import { weatherIconInline, weatherLabel, refreshWeather, searchCity, HOT_CITIES } from './weather.js';
 import { faviconUrl, resolveIcon } from './icons.js';
+import { t, isEnglish, formatDate } from './i18n.js';
+import { lookupCityNames } from './city-search.js';
 
 let sidebarEl = null;
 let signature = '';
@@ -15,11 +17,20 @@ let parts = {};
 let weatherTimer = 0;
 let secondTimer = 0;
 let slowTimer = 0;
+let sidebarObserver = null;
+let scrollStateFrame = 0;
+let sidebarScrollHandler = null;
+let sidebarRail = null;
 
 /* --------------------------------------------------------------- 初始化 */
 
 export function initWidgets() {
   sidebarEl = $('#sidebar');
+  // 滚动指示条放在侧栏外面，避免原生滚动条挤占卡片宽度
+  sidebarRail = h('div', { class: 'sidebar-scroll-rail', 'aria-hidden': 'true' }, h('i'));
+  sidebarEl.after(sidebarRail);
+  sidebarScrollHandler = () => scheduleSidebarScrollState();
+  sidebarEl.addEventListener('scroll', sidebarScrollHandler, { passive: true });
   rebuild();
   store.subscribe(onChange);
   startWeatherTimer();
@@ -38,8 +49,21 @@ export function initWidgets() {
   return () => {
     clearInterval(weatherTimer);
     stopSideTimers();
+    sidebarObserver?.disconnect();
+    sidebarObserver = null;
+    cancelAnimationFrame(scrollStateFrame);
+    scrollStateFrame = 0;
+    sidebarEl?.removeEventListener('scroll', sidebarScrollHandler);
+    sidebarRail?.remove();
+    sidebarRail = null;
     document.removeEventListener('visibilitychange', refreshOnVisible);
   };
+}
+
+/** 语言切换后重建整栏卡片（保留滚动位置） */
+export function refreshWidgetsLocale() {
+  if (!sidebarEl) return;
+  rebuild(true);
 }
 
 function onChange(scope) {
@@ -79,6 +103,46 @@ function sidebarActive() {
   return Boolean(sidebarEl) && !document.hidden && !sidebarEl.classList.contains('is-hidden');
 }
 
+/* 侧栏滚动状态：底部渐隐提示「下面还有卡片」，滚到底后撤掉渐隐 */
+function updateSidebarScrollState() {
+  if (!sidebarEl) return;
+  const max = sidebarEl.scrollHeight - sidebarEl.clientHeight;
+  const scrollable = max > 1;
+  const hidden = sidebarEl.classList.contains('is-hidden');
+  sidebarEl.classList.toggle('is-scrollable', scrollable);
+  sidebarEl.classList.toggle('is-scroll-end', !scrollable || sidebarEl.scrollTop >= max - 2);
+  if (!sidebarRail) return;
+  if (!scrollable || hidden) {
+    sidebarRail.classList.remove('is-visible');
+    return;
+  }
+  // 指示条的高度对应整个侧栏可视区，滑块按内容比例缩放
+  const railHeight = sidebarRail.clientHeight;
+  if (!railHeight) return;
+  // 用指示条自身的可视高度算比例，和它实际能走的距离一致
+  const thumb = Math.min(railHeight, Math.max(30, (railHeight / sidebarEl.scrollHeight) * railHeight));
+  const y = max > 0 ? (sidebarEl.scrollTop / max) * (railHeight - thumb) : 0;
+  sidebarRail.style.setProperty('--rail-thumb', `${Math.round(thumb)}px`);
+  sidebarRail.style.setProperty('--rail-y', `${Math.round(y)}px`);
+  sidebarRail.classList.add('is-visible');
+}
+
+function scheduleSidebarScrollState() {
+  if (scrollStateFrame) return;
+  scrollStateFrame = requestAnimationFrame(() => {
+    scrollStateFrame = 0;
+    updateSidebarScrollState();
+  });
+}
+
+function observeSidebarContent() {
+  if (typeof ResizeObserver === 'undefined' || !sidebarEl) return;
+  sidebarObserver?.disconnect();
+  sidebarObserver = new ResizeObserver(scheduleSidebarScrollState);
+  sidebarObserver.observe(sidebarEl);
+  for (const child of sidebarEl.children) sidebarObserver.observe(child);
+}
+
 function stopSideTimers() {
   clearInterval(secondTimer);
   clearInterval(slowTimer);
@@ -116,6 +180,8 @@ function rebuild(force = false) {
     updateSidebarVisibility();
     return;
   }
+  // 开关小组件/世界时钟变更会整栏重建：保留用户已经滚到的位置
+  const scrollTop = sidebarEl.scrollTop;
   signature = next;
   parts = {};
   stopSideTimers();
@@ -154,6 +220,9 @@ function rebuild(force = false) {
     sidebarEl.appendChild(parts.topSites);
   }
 
+  if (scrollTop > 0) sidebarEl.scrollTop = scrollTop;
+  observeSidebarContent();
+  updateSidebarScrollState();
   updateSidebarVisibility();
   startSideTimers();
   if (store.state.config.layout.showWeather) loadWeather(false);
@@ -185,37 +254,56 @@ function updateSidebarVisibility() {
     repaintSide();
     startSideTimers();
   }
+  scheduleSidebarScrollState();
 }
 
 /* --------------------------------------------------------------- 天气 */
 
 function buildWeatherCard() {
   const card = h('div', { class: 'card' });
-  const title = h('div', { class: 'card-title' }, h('span', { html: svgIcon('weather', 14) }), h('span', { text: '天气' }));
-  const cityBtn = h('button', {
-    class: 'weather-city',
-    type: 'button',
-    title: '切换城市',
-    'aria-label': '切换城市',
-    html: `${svgIcon('compass', 12)}<span>--</span>`,
-    onclick: () => openCityPicker(),
-  });
+  const title = h(
+    'div',
+    { class: 'card-title' },
+    h('span', { html: svgIcon('weather', 14) }),
+    h('span', { text: t('天气') })
+  );
+  const cityName = h('span', { class: 'city-name', text: '--' });
+  const cityBtn = h(
+    'button',
+    {
+      class: 'weather-city',
+      type: 'button',
+      title: t('切换城市'),
+      'aria-label': t('切换城市'),
+      onclick: () => openCityPicker(),
+    },
+    h('span', { class: 'city-pin', html: svgIcon('compass', 12), 'aria-hidden': 'true' }),
+    cityName,
+    h('span', { class: 'city-caret', html: svgIcon('chevron-down', 10), 'aria-hidden': 'true' })
+  );
   const refreshBtn = h('button', {
-    class: 'card-action',
+    class: 'card-action weather-refresh',
     type: 'button',
-    title: '刷新天气',
-    'aria-label': '刷新天气',
+    title: t('刷新天气'),
+    'aria-label': t('刷新天气'),
     html: svgIcon('refresh', 14),
     onclick: () => loadWeather(true),
   });
 
-  const head = h('div', { class: 'card-head' }, title, h('div', { style: { display: 'flex', gap: '4px', alignItems: 'center' } }, cityBtn, refreshBtn));
+  const head = h(
+    'div',
+    { class: 'card-head' },
+    title,
+    h('div', { class: 'weather-actions' }, cityBtn, refreshBtn)
+  );
 
-  const body = h('div', { class: 'weather-body' }, h('div', { class: 'empty-state', text: '正在获取天气…' }));
+  const body = h('div', { class: 'weather-body' }, h('div', { class: 'empty-state', text: t('正在获取天气…') }));
 
   card.appendChild(head);
   card.appendChild(body);
   parts.weatherCity = cityBtn;
+  parts.weatherCityName = cityName;
+  parts.weatherRefresh = refreshBtn;
   parts.weatherBody = body;
   return card;
 }
@@ -229,13 +317,43 @@ function weatherNumber(value, suffix = '') {
   return Number.isFinite(number) ? `${Math.round(number)}${suffix}` : '—';
 }
 
+/** 天气城市显示名：中文界面用中文规范名，英文界面优先用英文名 */
+function weatherCityLabel(weather) {
+  if (isEnglish()) return weather.cityEn || weather.city || '';
+  return weather.city || weather.cityEn || '';
+}
+
+let cityLookupSeq = 0;
+
+/** 老数据只有中文城市名：英文界面下按名字补一次英文名，查到后缓存进状态 */
+function ensureWeatherCityEnglish() {
+  if (!isEnglish()) return;
+  const weather = store.state.weather;
+  if (weather.cityEn || !weather.city) return;
+  const seq = ++cityLookupSeq;
+  lookupCityNames(weather.city)
+    .then((found) => {
+      if (seq !== cityLookupSeq || !found?.nameEn) return;
+      if (store.state.weather.city !== weather.city) return;
+      store.setWeather({ cityEn: found.nameEn });
+    })
+    .catch(() => {
+      /* 城市库没加载出来就保持中文名，不影响天气 */
+    });
+}
+
 function updateWeather() {
   if (!parts.weatherBody) return;
   const { weather, config } = store.state;
+  ensureWeatherCityEnglish();
+  const city = weatherCityLabel(weather);
 
-  const citySpan = parts.weatherCity?.querySelector('span');
-  if (citySpan) citySpan.textContent = weather.city || '选择城市';
-  parts.weatherCity?.setAttribute('aria-label', `切换城市，当前${weather.city || '未选择'}`);
+  if (parts.weatherCityName) parts.weatherCityName.textContent = city || t('选择城市');
+  parts.weatherCity?.setAttribute(
+    'aria-label',
+    city ? t('切换城市，当前 {city}', { city }) : t('选择城市')
+  );
+  parts.weatherCity?.setAttribute('title', city ? t('{city} · 点击切换城市', { city }) : t('选择城市'));
 
   clear(parts.weatherBody);
   const cache = weather.cache;
@@ -244,7 +362,7 @@ function updateWeather() {
     parts.weatherBody.appendChild(
       h('div', {
         class: 'empty-state',
-        text: weather.error ? '天气获取失败，点击右上角重试' : '暂无天气数据',
+        text: weather.error ? t('天气获取失败，点击右上角重试') : t('暂无天气数据'),
       })
     );
     return;
@@ -268,8 +386,8 @@ function updateWeather() {
         'div',
         { class: 'weather-meta' },
         h('span', { text: weatherLabel(cache.code) }),
-        h('span', { text: `体感 ${weatherNumber(cache.feels, '°')}` }),
-        h('span', { text: `湿度 ${weatherNumber(cache.humidity, '%')}` })
+        h('span', { text: t('体感 {value}', { value: weatherNumber(cache.feels, '°') }) }),
+        h('span', { text: t('湿度 {value}', { value: weatherNumber(cache.humidity, '%') }) })
       )
     )
   );
@@ -281,7 +399,11 @@ function updateWeather() {
       if (!day || typeof day !== 'object') return;
       const date = day.iso ? new Date(`${day.iso}T00:00:00`) : null;
       const validDate = date && !Number.isNaN(date.getTime()) ? date : null;
-      const name = index === 0 ? '今天' : validDate ? `${validDate.getMonth() + 1}/${validDate.getDate()}` : '—';
+      const name = index === 0
+        ? t('今天')
+        : validDate
+          ? formatDate(validDate, { month: 'numeric', day: 'numeric' })
+          : '—';
       forecast.appendChild(
         h(
           'div',
@@ -305,18 +427,29 @@ function updateWeather() {
       h('div', {
         class: 'field-hint',
         style: { marginTop: '8px', textAlign: 'right', fontSize: '10.5px' },
-        text: `${relativeTime(weather.updatedAt)}更新 · Open-Meteo`,
+        text: t('{time}更新 · Open-Meteo', { time: relativeTime(weather.updatedAt) }),
       })
     );
   }
   void config;
+  scheduleSidebarScrollState();
 }
 
 async function loadWeather(force) {
+  const refreshBtn = parts.weatherRefresh;
+  if (force && refreshBtn) {
+    refreshBtn.classList.add('is-busy');
+    refreshBtn.setAttribute('aria-busy', 'true');
+  }
   try {
     await refreshWeather(store.state, { force });
   } catch (err) {
     console.warn('[serein/widgets] 天气刷新异常', err);
+  } finally {
+    if (force && refreshBtn) {
+      refreshBtn.classList.remove('is-busy');
+      refreshBtn.removeAttribute('aria-busy');
+    }
   }
   updateWeather();
 }
@@ -333,69 +466,304 @@ function startWeatherTimer() {
 /* ------------------------------------------------------------- 城市选择 */
 
 async function openCityPicker() {
+  // 当前城市比较用中文规范名，显示用当前语言
+  const currentCity = store.state.weather.city || '';
+  const inputId = uid('city-input-');
+  const listId = uid('city-results-');
+  let modal = null;
+  let searchToken = 0;
+  let controller = null;
+  let matches = [];
+  let buttons = [];
+  let activeIndex = -1;
+
   const input = h('input', {
-    class: 'text-input',
+    id: inputId,
+    class: 'text-input city-input',
     type: 'text',
-    placeholder: '搜索城市，例如：杭州',
+    placeholder: t('搜索城市，例如：厦门、Xiamen'),
     maxlength: '80',
-    'aria-label': '搜索城市',
+    role: 'combobox',
+    autocomplete: 'off',
+    spellcheck: 'false',
+    'aria-label': t('搜索城市'),
+    'aria-autocomplete': 'list',
+    'aria-controls': listId,
+    'aria-expanded': 'false',
   });
-  const results = h('div', { class: 'link-list', style: { maxHeight: '240px', marginTop: '10px' } });
-  const hotRow = h('div', { class: 'btn-row', style: { marginTop: '12px' } });
+  const clearBtn = h('button', {
+    class: 'city-clear',
+    type: 'button',
+    title: t('清空搜索'),
+    'aria-label': t('清空搜索'),
+    html: svgIcon('close', 14),
+    hidden: true,
+  });
+  const search = h('div', { class: 'city-search' }, input, clearBtn);
+  const results = h('div', {
+    id: listId,
+    class: 'city-results',
+    role: 'listbox',
+    'aria-label': t('城市搜索结果'),
+    hidden: true,
+  });
+  const hotTitle = h('div', { class: 'group-title city-hot-title', text: t('常用城市') });
+  const hotRow = h('div', { class: 'city-hot' });
+  const status = h('div', { class: 'sr-only', role: 'status', 'aria-live': 'polite' });
 
   const pick = (city) => {
-    store.setWeather({ city: city.name, lat: city.lat, lon: city.lon, updatedAt: 0, cache: null, error: '' });
-    modal.close();
+    if (!city) return;
+    searchToken += 1;
+    controller?.abort();
+    store.setWeather({
+      // 两种语言都保存，切换语言后天气卡片不用重新选城市
+      city: city.nameZh || city.name,
+      cityEn: city.nameEn || city.name,
+      lat: city.lat,
+      lon: city.lon,
+      updatedAt: 0,
+      cache: null,
+      error: '',
+    });
+    modal?.close();
     loadWeather(true);
   };
 
   for (const city of HOT_CITIES) {
-    hotRow.appendChild(h('button', { class: 'btn', type: 'button', text: city.name, onclick: () => pick(city) }));
+    const name = isEnglish() ? city.nameEn : city.name;
+    hotRow.appendChild(
+      h('button', {
+        class: `btn city-hot-btn${city.name === currentCity ? ' is-current' : ''}`,
+        type: 'button',
+        text: name,
+        'aria-current': city.name === currentCity ? 'true' : null,
+        onclick: () => pick(city),
+      })
+    );
   }
 
-  let searchToken = 0;
+  const setExpanded = (expanded) => input.setAttribute('aria-expanded', String(expanded));
+  const updateClear = () => {
+    clearBtn.hidden = !input.value.trim();
+  };
+  const showHot = (show) => {
+    hotTitle.hidden = !show;
+    hotRow.hidden = !show;
+  };
+  const clearActive = () => {
+    activeIndex = -1;
+    input.removeAttribute('aria-activedescendant');
+    for (const button of buttons) {
+      button.classList.remove('is-active');
+      button.setAttribute('aria-selected', 'false');
+    }
+  };
+  const setActive = (index) => {
+    if (!buttons.length) return;
+    const next = ((index % buttons.length) + buttons.length) % buttons.length;
+    activeIndex = next;
+    buttons.forEach((button, i) => {
+      const on = i === next;
+      button.classList.toggle('is-active', on);
+      button.setAttribute('aria-selected', String(on));
+    });
+    input.setAttribute('aria-activedescendant', buttons[next].id);
+    buttons[next].scrollIntoView({ block: 'nearest' });
+  };
+  const reset = () => {
+    clear(results);
+    results.hidden = true;
+    setExpanded(false);
+    clearActive();
+    matches = [];
+    buttons = [];
+    showHot(true);
+    status.textContent = '';
+  };
+  const renderLoading = () => {
+    clear(results);
+    results.hidden = false;
+    setExpanded(false);
+    clearActive();
+    matches = [];
+    buttons = [];
+    results.appendChild(
+      h(
+        'div',
+        { class: 'city-loading' },
+        h('span', { class: 'city-spinner', 'aria-hidden': 'true' }),
+        h('span', { text: t('正在搜索城市…') })
+      )
+    );
+    status.textContent = t('正在搜索城市');
+  };
+  const renderEmpty = (keyword) => {
+    const cjk = /[\u3400-\u9fff]/.test(keyword);
+    const shown = keyword.length > 28 ? `${keyword.slice(0, 28)}…` : keyword;
+    clear(results);
+    results.hidden = false;
+    setExpanded(false);
+    clearActive();
+    matches = [];
+    buttons = [];
+    results.appendChild(
+      h(
+        'div',
+        { class: 'city-empty' },
+        h('div', { class: 'city-empty-title', text: t('没有找到「{query}」', { query: shown }) }),
+        h('div', {
+          class: 'city-empty-hint',
+          text: cjk ? t('可以试试拼音或英文名，例如 Xiamen') : t('检查一下拼写，或直接输入中文城市名'),
+        })
+      )
+    );
+    status.textContent = t('没有找到匹配的城市');
+  };
+  const renderResults = (list) => {
+    clear(results);
+    results.hidden = false;
+    setExpanded(true);
+    clearActive();
+    matches = list;
+    buttons = [];
+    list.forEach((city, index) => {
+      const current = city.name === currentCity;
+      const button = h(
+        'button',
+        {
+          id: `${listId}-${index}`,
+          class: 'city-result',
+          type: 'button',
+          role: 'option',
+          tabindex: '-1',
+          'aria-selected': 'false',
+          onclick: () => pick(city),
+        },
+        h('span', { class: 'city-result-icon', html: svgIcon('compass', 15), 'aria-hidden': 'true' }),
+        h(
+          'span',
+          { class: 'city-result-text' },
+          h('span', { class: 'city-result-name', text: city.name }),
+          city.region ? h('span', { class: 'city-result-region', text: city.region }) : null
+        ),
+        current ? h('span', { class: 'city-current', text: t('当前') }) : null
+      );
+      buttons.push(button);
+      results.appendChild(button);
+    });
+    showHot(false);
+    status.textContent = t('找到 {n} 个城市', { n: list.length });
+    setActive(0);
+  };
+
   const runSearch = debounce(async () => {
     const keyword = input.value.trim();
-    const token = ++searchToken;
-    clear(results);
-    if (!keyword) return;
-    results.appendChild(h('div', { class: 'empty-state', text: '搜索中…' }));
-    const list = await searchCity(keyword);
-    if (token !== searchToken) return;
-    clear(results);
-    if (!list.length) {
-      results.appendChild(h('div', { class: 'empty-state', text: '没有找到匹配的城市' }));
+    updateClear();
+    if (!keyword) {
+      reset();
       return;
     }
-    for (const city of list) {
-      results.appendChild(
-        h(
-          'button',
-          { class: 'link-row', type: 'button', onclick: () => pick(city) },
-          h('span', { html: svgIcon('compass', 14) }),
-          h('span', { class: 'name', text: city.name }),
-          h('span', { class: 'suggest-hint', text: city.region })
-        )
-      );
+    const token = ++searchToken;
+    controller?.abort();
+    controller = new AbortController();
+    showHot(false);
+    renderLoading();
+    let list = [];
+    try {
+      list = await searchCity(keyword, { signal: controller.signal });
+    } catch {
+      list = [];
     }
-  }, 350);
+    if (token !== searchToken) return;
+    if (!list.length) {
+      renderEmpty(keyword);
+      // 没有结果时把常用城市放回来，至少还能一键选择
+      showHot(true);
+      return;
+    }
+    renderResults(list);
+  }, 180);
 
-  input.addEventListener('input', runSearch);
+  const clearSearch = () => {
+    input.value = '';
+    updateClear();
+    runSearch.cancel();
+    searchToken += 1;
+    controller?.abort();
+    reset();
+    input.focus({ preventScroll: true });
+  };
+
+  input.addEventListener('input', () => {
+    updateClear();
+    if (!input.value.trim()) {
+      runSearch.cancel();
+      searchToken += 1;
+      controller?.abort();
+      controller = null;
+      reset();
+      return;
+    }
+    // 先清掉旧结果和旧请求，再防抖：否则旧关键词的结果/回车仍会落到新输入上
+    searchToken += 1;
+    controller?.abort();
+    controller = null;
+    showHot(false);
+    renderLoading();
+    runSearch();
+  });
+  input.addEventListener('keydown', (event) => {
+    if (event.isComposing || event.keyCode === 229) return;
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      if (!buttons.length) return;
+      event.preventDefault();
+      if (activeIndex < 0) setActive(event.key === 'ArrowDown' ? 0 : buttons.length - 1);
+      else setActive(activeIndex + (event.key === 'ArrowDown' ? 1 : -1));
+      return;
+    }
+    if (event.key === 'Home' || event.key === 'End') {
+      if (!buttons.length) return;
+      event.preventDefault();
+      setActive(event.key === 'Home' ? 0 : buttons.length - 1);
+      return;
+    }
+    if (event.key === 'Enter' && matches.length) {
+      event.preventDefault();
+      const index = activeIndex >= 0 ? activeIndex : 0;
+      setActive(index);
+      pick(matches[index]);
+    }
+  });
+  clearBtn.addEventListener('click', clearSearch);
 
   const body = h(
     'div',
-    {},
-    h('div', { class: 'field' }, h('label', { text: '搜索城市' }), input),
+    { class: 'city-picker' },
+    h(
+      'div',
+      { class: 'field' },
+      h('label', { for: inputId, text: t('搜索城市') }),
+      search,
+      h('div', { class: 'field-hint', text: t('支持中文、拼音和英文；选择后会自动刷新天气。') })
+    ),
     results,
-    h('div', { class: 'group-title', style: { marginTop: '16px' }, text: '常用城市' }),
+    status,
+    hotTitle,
     hotRow
   );
 
-  const modal = (await import('./modals.js')).openModal({ title: '选择城市', body, footer: [] });
-  setTimeout(() => {
-    // 用户可能在 80ms 内就关掉了弹窗
-    if (input.isConnected && input.closest('.modal.is-open')) input.focus();
-  }, 80);
+  const { openModal } = await import('./modals.js');
+  modal = openModal({
+    title: t('选择城市'),
+    body,
+    footer: [],
+    onClose: () => {
+      runSearch.cancel();
+      searchToken += 1;
+      controller?.abort();
+      controller = null;
+    },
+  });
 }
 
 /* --------------------------------------------------------------- 专注 */
@@ -421,7 +789,7 @@ function finishPomodoro() {
   pomodoro.running = false;
   store.commit('pomodoro');
   bus.emit('toast', {
-    text: next === 'break' ? '专注完成，休息 5 分钟' : '休息结束，继续专注',
+    text: next === 'break' ? t('专注完成，休息 5 分钟') : t('休息结束，继续专注'),
   });
 }
 
@@ -430,8 +798,8 @@ function buildPomodoroCard() {
   const reset = h('button', {
     class: 'card-action',
     type: 'button',
-    title: '重置',
-    'aria-label': '重置专注计时',
+    title: t('重置'),
+    'aria-label': t('重置专注计时'),
     html: svgIcon('refresh', 14),
     onclick: () => {
       const pomodoro = store.state.pomodoro;
@@ -442,13 +810,13 @@ function buildPomodoroCard() {
       store.commit('pomodoro');
     },
   });
-  const phaseEl = h('div', { class: 'pomo-phase', text: '专注' });
+  const phaseEl = h('div', { class: 'pomo-phase', text: t('专注') });
   const timeEl = h('div', { class: 'pomo-time', text: '25:00' });
   const bar = h('i');
   const toggle = h('button', {
     class: 'btn is-primary pomo-toggle',
     type: 'button',
-    text: '开始',
+    text: t('开始'),
     onclick: () => {
       const pomodoro = store.state.pomodoro;
       if (pomodoro.running) {
@@ -469,10 +837,19 @@ function buildPomodoroCard() {
     const pomodoro = store.state.pomodoro;
     const left = pomodoroLeft(pomodoro);
     const total = POMO_SECONDS[pomodoro.phase] || POMO_SECONDS.focus;
-    phaseEl.textContent = pomodoro.phase === 'break' ? '休息' : '专注';
+    phaseEl.textContent = pomodoro.phase === 'break' ? t('休息') : t('专注');
     timeEl.textContent = formatPomo(left);
-    toggle.textContent = pomodoro.running ? '暂停' : '开始';
-    toggle.setAttribute('aria-label', `${pomodoro.running ? '暂停' : '开始'}${pomodoro.phase === 'break' ? '休息' : '专注'}计时`);
+    toggle.textContent = pomodoro.running ? t('暂停') : t('开始');
+    toggle.setAttribute(
+      'aria-label',
+      pomodoro.running
+        ? pomodoro.phase === 'break'
+          ? t('暂停休息计时')
+          : t('暂停专注计时')
+        : pomodoro.phase === 'break'
+          ? t('开始休息计时')
+          : t('开始专注计时')
+    );
     // 用 transform 而不是 width：进度条每秒推进时不会触发重排
     bar.style.transform = `scaleX(${Math.min(1, Math.max(0, 1 - left / total))})`;
     card.classList.toggle('is-break', pomodoro.phase === 'break');
@@ -483,7 +860,7 @@ function buildPomodoroCard() {
     h(
       'div',
       { class: 'card-head' },
-      h('div', { class: 'card-title' }, h('span', { html: svgIcon('timer', 14) }), h('span', { text: '专注' })),
+      h('div', { class: 'card-title' }, h('span', { html: svgIcon('timer', 14) }), h('span', { text: t('专注') })),
       reset
     ),
     h(
@@ -526,8 +903,11 @@ const WORLD_CITIES = [
   { tz: 'Australia/Sydney', label: '悉尼' },
 ];
 
-const cityLabel = (tz) =>
-  WORLD_CITIES.find((city) => city.tz === tz)?.label || String(tz).split('/').pop().replace(/_/g, ' ');
+const cityLabel = (tz) => {
+  const known = WORLD_CITIES.find((city) => city.tz === tz);
+  if (known) return t(known.label);
+  return String(tz).split('/').pop().replace(/_/g, ' ');
+};
 
 function dateKeyInZone(date, timeZone) {
   return new Intl.DateTimeFormat('en-CA', {
@@ -544,10 +924,10 @@ function dayTag(zoneKey, localKey) {
     return Date.UTC(year, month - 1, day);
   };
   const diff = Math.round((asDay(zoneKey) - asDay(localKey)) / 86400000);
-  if (diff === 0) return '今天';
-  if (diff === 1) return '明天';
-  if (diff === -1) return '昨天';
-  return diff > 0 ? `+${diff} 天` : `${diff} 天`;
+  if (diff === 0) return t('今天');
+  if (diff === 1) return t('明天');
+  if (diff === -1) return t('昨天');
+  return diff > 0 ? t('+{n} 天', { n: diff }) : t('-{n} 天', { n: Math.abs(diff) });
 }
 
 async function editWorldClocks() {
@@ -566,7 +946,7 @@ async function editWorldClocks() {
         'label',
         { class: 'world-city-option' },
         input,
-        h('span', { text: city.label }),
+        h('span', { text: t(city.label) }),
         h('span', { class: 'field-hint', text: city.tz })
       ),
     };
@@ -581,19 +961,19 @@ async function editWorldClocks() {
   const body = h(
     'div',
     {},
-    h('div', { class: 'field-hint', text: '最多选择 6 个城市，卡片每秒刷新一次。' }),
+    h('div', { class: 'field-hint', text: t('最多选择 6 个城市，卡片每秒刷新一次。') }),
     h('div', { class: 'world-city-grid' }, ...boxes.map((item) => item.row))
   );
   const { openModal } = await import('./modals.js');
   const modal = openModal({
-    title: '选择世界时钟城市',
+    title: t('选择世界时钟城市'),
     body,
     footer: [
-      h('button', { class: 'btn', type: 'button', text: '取消', onclick: () => modal.close() }),
+      h('button', { class: 'btn', type: 'button', text: t('取消'), onclick: () => modal.close() }),
       h('button', {
         class: 'btn is-primary',
         type: 'button',
-        text: '保存',
+        text: t('保存'),
         onclick: () => {
           store.state.worldClocks = boxes.filter((item) => item.input.checked).map((item) => item.city.tz);
           modal.close();
@@ -609,8 +989,8 @@ function buildWorldClockCard() {
   const edit = h('button', {
     class: 'card-action',
     type: 'button',
-    title: '选择城市',
-    'aria-label': '选择世界时钟城市',
+    title: t('选择城市'),
+    'aria-label': t('选择世界时钟城市'),
     html: svgIcon('compass', 14),
     onclick: () => editWorldClocks(),
   });
@@ -623,8 +1003,8 @@ function buildWorldClockCard() {
         h(
           'div',
           { class: 'empty-state' },
-          h('div', { text: '还没有添加城市' }),
-          h('button', { class: 'btn is-ghost', type: 'button', text: '选择城市', onclick: () => editWorldClocks() })
+          h('div', { text: t('还没有添加城市') }),
+          h('button', { class: 'btn is-ghost', type: 'button', text: t('选择城市'), onclick: () => editWorldClocks() })
         )
       );
       return;
@@ -663,7 +1043,12 @@ function buildWorldClockCard() {
     h(
       'div',
       { class: 'card-head' },
-      h('div', { class: 'card-title' }, h('span', { html: svgIcon('compass', 14) }), h('span', { text: '世界时钟' })),
+      h(
+        'div',
+        { class: 'card-title' },
+        h('span', { html: svgIcon('compass', 14) }),
+        h('span', { text: t('世界时钟') })
+      ),
       edit
     ),
     list
@@ -699,21 +1084,21 @@ async function editCountdown() {
     type: 'text',
     maxlength: '60',
     value: current.title || '',
-    placeholder: '例如：项目截止',
-    'aria-label': '倒计时名称',
+    placeholder: t('例如：项目截止'),
+    'aria-label': t('倒计时名称'),
   });
   const dateInput = h('input', {
     class: 'text-input',
     type: 'datetime-local',
     value: localDateTimeValue(current.target > Date.now() ? current.target : Date.now() + 3600000),
-    'aria-label': '倒计时时间',
+    'aria-label': t('倒计时时间'),
   });
   const error = h('div', { class: 'field-error', role: 'alert', hidden: true });
   const body = h(
     'div',
     {},
-    h('div', { class: 'field' }, h('label', { text: '名称' }), titleInput),
-    h('div', { class: 'field' }, h('label', { text: '目标时间' }), dateInput),
+    h('div', { class: 'field' }, h('label', { text: t('名称') }), titleInput),
+    h('div', { class: 'field' }, h('label', { text: t('目标时间') }), dateInput),
     error
   );
   const { openModal } = await import('./modals.js');
@@ -721,16 +1106,16 @@ async function editCountdown() {
   const save = () => {
     const target = new Date(dateInput.value).getTime();
     if (!Number.isFinite(target)) {
-      error.textContent = '请选择有效的日期与时间';
+      error.textContent = t('请选择有效的日期与时间');
       error.hidden = false;
       return;
     }
     if (target <= Date.now()) {
-      error.textContent = '目标时间需要晚于现在';
+      error.textContent = t('目标时间需要晚于现在');
       error.hidden = false;
       return;
     }
-    const next = { title: titleInput.value.trim().slice(0, 60) || '倒计时', target };
+    const next = { title: titleInput.value.trim().slice(0, 60) || t('倒计时'), target };
     store.state.countdown = next;
     modal?.close();
     store.commit('countdown');
@@ -748,11 +1133,11 @@ async function editCountdown() {
     }
   });
   modal = openModal({
-    title: current.target ? '编辑倒计时' : '新建倒计时',
+    title: current.target ? t('编辑倒计时') : t('新建倒计时'),
     body,
     footer: [
-      h('button', { class: 'btn', type: 'button', text: '取消', onclick: () => modal.close() }),
-      h('button', { class: 'btn is-primary', type: 'button', text: '保存', onclick: save }),
+      h('button', { class: 'btn', type: 'button', text: t('取消'), onclick: () => modal.close() }),
+      h('button', { class: 'btn is-primary', type: 'button', text: t('保存'), onclick: save }),
     ],
   });
 }
@@ -762,16 +1147,16 @@ function buildCountdownCard() {
   const edit = h('button', {
     class: 'card-action',
     type: 'button',
-    title: '编辑倒计时',
-    'aria-label': '编辑倒计时',
+    title: t('编辑倒计时'),
+    'aria-label': t('编辑倒计时'),
     html: svgIcon('edit', 14),
     onclick: () => editCountdown(),
   });
   const clearBtn = h('button', {
     class: 'card-action',
     type: 'button',
-    title: '清除倒计时',
-    'aria-label': '清除倒计时',
+    title: t('清除倒计时'),
+    'aria-label': t('清除倒计时'),
     html: svgIcon('close', 14),
     onclick: () => {
       store.state.countdown = { title: '', target: 0 };
@@ -788,8 +1173,8 @@ function buildCountdownCard() {
         h(
           'div',
           { class: 'empty-state' },
-          h('div', { text: '还没有倒计时' }),
-          h('button', { class: 'btn is-ghost', type: 'button', text: '设置一个', onclick: () => editCountdown() })
+          h('div', { text: t('还没有倒计时') }),
+          h('button', { class: 'btn is-ghost', type: 'button', text: t('设置一个'), onclick: () => editCountdown() })
         )
       );
       clearBtn.style.display = 'none';
@@ -802,9 +1187,9 @@ function buildCountdownCard() {
       h(
         'div',
         { class: `countdown${left.done ? ' is-done' : ''}` },
-        h('div', { class: 'countdown-title', text: countdown.title || '倒计时' }),
+        h('div', { class: 'countdown-title', text: countdown.title || t('倒计时') }),
         left.done
-          ? h('div', { class: 'countdown-done', text: '时间到了' })
+          ? h('div', { class: 'countdown-done', text: t('时间到了') })
           : h(
               'div',
               { class: 'countdown-grid' },
@@ -818,19 +1203,19 @@ function buildCountdownCard() {
                   'div',
                   { class: 'countdown-cell' },
                   h('span', { class: 'countdown-value', text: String(value).padStart(2, '0') }),
-                  h('span', { class: 'countdown-unit', text: unit })
+                  h('span', { class: 'countdown-unit', text: t(unit) })
                 )
               )
             ),
         h('div', {
           class: 'field-hint',
-          text: new Intl.DateTimeFormat('zh-CN', {
+          text: formatDate(new Date(countdown.target), {
             month: 'long',
             day: 'numeric',
             hour: '2-digit',
             minute: '2-digit',
             hourCycle: 'h23',
-          }).format(new Date(countdown.target)),
+          }),
         })
       )
     );
@@ -842,7 +1227,7 @@ function buildCountdownCard() {
     h(
       'div',
       { class: 'card-head' },
-      h('div', { class: 'card-title' }, h('span', { html: svgIcon('timer', 14) }), h('span', { text: '倒计时' })),
+      h('div', { class: 'card-title' }, h('span', { html: svgIcon('timer', 14) }), h('span', { text: t('倒计时') })),
       h('div', { style: { display: 'flex', gap: '2px' } }, edit, clearBtn)
     ),
     body
@@ -867,20 +1252,30 @@ function buildTodoCard() {
     'div',
     { class: 'card-title' },
     h('span', { html: svgIcon('list-checks', 14) }),
-    h('span', { text: '待办' }),
+    h('span', { text: t('待办') }),
     countBadge
   );
   const clearBtn = h('button', {
     class: 'card-action',
     type: 'button',
-    title: '清除已完成',
-    'aria-label': '清除已完成',
+    title: t('清除已完成'),
+    'aria-label': t('清除已完成'),
     html: svgIcon('trash', 14),
     onclick: () => store.clearDoneTodos(),
   });
 
-  const input = h('input', { type: 'text', placeholder: '添加待办，回车确认', maxlength: '200', 'aria-label': '添加待办' });
-  const addBtn = h('button', { type: 'button', title: '添加', 'aria-label': '添加待办', html: svgIcon('plus', 14) });
+  const input = h('input', {
+    type: 'text',
+    placeholder: t('添加待办，回车确认'),
+    maxlength: '200',
+    'aria-label': t('添加待办'),
+  });
+  const addBtn = h('button', {
+    type: 'button',
+    title: t('添加'),
+    'aria-label': t('添加待办'),
+    html: svgIcon('plus', 14),
+  });
 
   const submit = () => {
     const value = input.value.trim();
@@ -911,6 +1306,7 @@ function buildTodoCard() {
   parts.todoList = list;
   parts.todoCount = countBadge;
   parts.todoInput = input;
+  parts.todoClear = clearBtn;
   renderTodoList();
   return card;
 }
@@ -928,10 +1324,20 @@ function renderTodoList() {
   if (parts.todoCount) {
     const pending = todos.filter((todo) => !todo.done).length;
     parts.todoCount.textContent = String(pending);
+    parts.todoCount.setAttribute('aria-label', t('{n} 项未完成', { n: pending }));
+  }
+  if (parts.todoClear) {
+    const done = todos.filter((todo) => todo.done).length;
+    parts.todoClear.disabled = done === 0;
+    parts.todoClear.title = done ? t('清除已完成（{n}）', { n: done }) : t('没有已完成的待办');
+    parts.todoClear.setAttribute(
+      'aria-label',
+      done ? t('清除已完成的 {n} 项待办', { n: done }) : t('没有已完成的待办')
+    );
   }
 
   if (!todos.length) {
-    parts.todoList.appendChild(h('div', { class: 'empty-state', text: '还没有待办事项\n添加一条开始吧' }));
+    parts.todoList.appendChild(h('div', { class: 'empty-state', text: t('还没有待办事项\n添加一条开始吧') }));
     // 删掉最后一条时也要把焦点交给输入框，不能直接 return 丢到页面根部
   }
 
@@ -946,7 +1352,7 @@ function renderTodoList() {
       class: 'todo-check',
       type: 'button',
       'data-todo-action': 'toggle',
-      'aria-label': todo.done ? '标记未完成' : '标记完成',
+      'aria-label': todo.done ? t('标记未完成') : t('标记完成'),
       html: svgIcon('check', 11),
       onclick: () => store.toggleTodo(todo.id),
     });
@@ -955,7 +1361,7 @@ function renderTodoList() {
       class: 'todo-del',
       type: 'button',
       'data-todo-action': 'delete',
-      'aria-label': '删除待办',
+      'aria-label': t('删除待办'),
       html: svgIcon('close', 12),
       onclick: () => store.removeTodo(todo.id),
     });
@@ -979,6 +1385,7 @@ function renderTodoList() {
       (next || parts.todoInput)?.focus({ preventScroll: true });
     }
   }
+  scheduleSidebarScrollState();
 }
 
 /* --------------------------------------------------------------- 便签 */
@@ -989,29 +1396,29 @@ function buildNotesCard() {
     'div',
     { class: 'card-title' },
     h('span', { html: svgIcon('note', 14) }),
-    h('span', { text: '便签' })
+    h('span', { text: t('便签') })
   );
 
   const area = h('textarea', {
     class: 'notes-area',
-    placeholder: '随手记点什么…',
+    placeholder: t('随手记点什么…'),
     maxlength: '20000',
     spellcheck: 'false',
-    'aria-label': '便签',
+    'aria-label': t('便签'),
   });
   area.value = store.state.notes || '';
 
   const markSaved = debounce(() => {
-    status.textContent = '已保存';
+    status.textContent = t('已保存');
     setTimeout(() => {
-      if (status.textContent === '已保存') status.textContent = '';
+      if (status.textContent === t('已保存')) status.textContent = '';
     }, 1600);
   }, 500);
 
   area.addEventListener('input', () => {
     // 立即写入状态树：即使 500ms 内关闭标签页，pagehide 的 flushNow 也能落盘
     store.setNotes(area.value);
-    status.textContent = '输入中…';
+    status.textContent = t('输入中…');
     markSaved();
   });
 
@@ -1035,7 +1442,7 @@ function buildNotesCard() {
 
 function buildLinksCard(kind) {
   const isBookmarks = kind === 'bookmarks';
-  const titleText = isBookmarks ? '书签' : '常去网站';
+  const titleText = isBookmarks ? t('书签') : t('常去网站');
   const title = h(
     'div',
     { class: 'card-title' },
@@ -1057,18 +1464,18 @@ function buildLinksCard(kind) {
         h(
           'div',
           { class: 'empty-state' },
-          h('div', { text: `需要授权才能读取${titleText}` }),
+          h('div', { text: t('需要授权才能读取{name}', { name: titleText }) }),
           h(
             'button',
             {
               class: 'btn',
               type: 'button',
               style: { marginTop: '10px' },
-              text: '允许访问',
+              text: t('允许访问'),
               onclick: async () => {
                 const ok = await requestPermission(isBookmarks ? 'bookmarks' : 'topSites');
                 if (!ok) {
-                  bus.emit('toast', { text: `未获得${titleText}访问权限`, error: true });
+                  bus.emit('toast', { text: t('未获得{name}访问权限', { name: titleText }), error: true });
                   return;
                 }
                 // 授权成功后按钮会被 render 清掉，把焦点交给新出现的第一个链接
@@ -1085,7 +1492,7 @@ function buildLinksCard(kind) {
     const items = isBookmarks ? await loadBookmarks() : await loadTopSites();
 
     if (!items.length) {
-      body.appendChild(h('div', { class: 'empty-state', text: `暂无${titleText}` }));
+      body.appendChild(h('div', { class: 'empty-state', text: t('暂无{name}', { name: titleText }) }));
       return;
     }
 

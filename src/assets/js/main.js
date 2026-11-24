@@ -6,12 +6,13 @@
 
 import { $, h, clear, svgIcon, bus, debounce } from './util.js';
 import * as store from './store.js';
+import { t, resolveLocale, setLocale, onLocaleChange } from './i18n.js';
 import { applyConfig, syncDensity } from './theme.js';
 import { initBackground, applyBackground, applyBackgroundLook, cycleBing } from './wallpaper.js';
 import { initClock, refreshClock } from './clock.js';
-import { initSearch } from './search.js';
-import { initTiles } from './tiles.js';
-import { initWidgets } from './widgets.js';
+import { initSearch, refreshSearchLocale } from './search.js';
+import { initTiles, refreshTilesLocale } from './tiles.js';
+import { initWidgets, refreshWidgetsLocale } from './widgets.js';
 import { requestPersistentStorage } from './storage.js';
 import { applyCustomFont } from './custom-font.js';
 
@@ -32,7 +33,7 @@ function showToast({ text, error = false, action = null }) {
       h('button', {
         class: 'toast-action',
         type: 'button',
-        text: action.label || '撤销',
+        text: action.label || t('撤销'),
         onclick: () => {
           try {
             action.onClick?.();
@@ -70,7 +71,7 @@ async function openSettings(tab) {
     settingsModule.open(tab);
   } catch (err) {
     console.error('[serein] 设置面板加载失败', err);
-    showToast({ text: '设置面板加载失败，请刷新页面', error: true });
+    showToast({ text: t('设置面板加载失败，请刷新页面'), error: true });
   }
 }
 
@@ -82,22 +83,27 @@ document.addEventListener('serein:open-settings', () => openSettings());
 let topbarSignature = '';
 let settingsButton = null;
 
+function updateSettingsButtonLabels() {
+  if (!settingsButton) return;
+  settingsButton.title = t('设置 (Ctrl+,)');
+  settingsButton.setAttribute('aria-label', t('打开设置'));
+}
+
 function getSettingsButton() {
   if (!settingsButton) {
     settingsButton = h('button', {
       class: 'icon-btn glass',
       type: 'button',
       'data-action': 'settings',
-      title: '设置 (Ctrl+,)',
-      'aria-label': '打开设置',
       html: svgIcon('settings', 17),
       onclick: () => bus.emit('openSettings', {}),
     });
+    updateSettingsButtonLabels();
   }
   return settingsButton;
 }
 
-function renderTopbar() {
+function renderTopbar(force = false) {
   const config = store.state.config;
   const widgets = config.widgets;
   const hasWidgets = Boolean(
@@ -114,7 +120,7 @@ function renderTopbar() {
   if (!right) return;
   // 拖设置里的滑块会高频 commit('config')：顶栏只跟这几个字段有关，别每次都重建 DOM
   const signature = `${config.background.type}|${config.sidebar}|${hasWidgets ? '1' : '0'}`;
-  if (signature === topbarSignature) return;
+  if (!force && signature === topbarSignature) return;
   topbarSignature = signature;
   const focusedAction = right.contains(document.activeElement) ? document.activeElement.dataset.action || null : null;
   clear(right);
@@ -125,13 +131,13 @@ function renderTopbar() {
         class: 'icon-btn glass',
         type: 'button',
         'data-action': 'bing',
-        title: '换一张壁纸',
-        'aria-label': '换一张壁纸',
+        title: t('换一张壁纸'),
+        'aria-label': t('换一张壁纸'),
         html: svgIcon('image', 17),
         onclick: async () => {
           await cycleBing(store.state, 1);
           store.commit('config');
-          showToast({ text: '已切换壁纸' });
+          showToast({ text: t('已切换壁纸') });
         },
       })
     );
@@ -143,8 +149,8 @@ function renderTopbar() {
         class: `icon-btn glass${config.sidebar === 'hidden' ? '' : ' is-active'}`,
         type: 'button',
         'data-action': 'sidebar',
-        title: config.sidebar === 'hidden' ? '显示小组件' : '隐藏小组件',
-        'aria-label': '小组件',
+        title: config.sidebar === 'hidden' ? t('显示小组件') : t('隐藏小组件'),
+        'aria-label': t('小组件'),
         'aria-pressed': config.sidebar === 'hidden' ? 'false' : 'true',
         html: svgIcon('sidebar', 17),
         onclick: () => {
@@ -174,7 +180,15 @@ function renderTopbar() {
 
 /* --------------------------------------------------------------- 启动 */
 
+function applyStaticLabels() {
+  document.querySelector('.dock')?.setAttribute('aria-label', t('快捷方式'));
+  document.getElementById('sidebar')?.setAttribute('aria-label', t('小组件'));
+}
+
 function boot() {
+  // 先落语言：后续所有模块创建 DOM 时拿到的就是正确的语言
+  setLocale(resolveLocale(store.state.config.language));
+  applyStaticLabels();
   applyConfig(store.state);
   applyCustomFont(store.state);
   initBackground(store);
@@ -196,7 +210,7 @@ function boot() {
 
   store.subscribe((scope) => {
     if (scope === 'storage-error') {
-      showToast({ text: '本地存储写入失败，请检查剩余空间', error: true });
+      showToast({ text: t('本地存储写入失败，请检查剩余空间'), error: true });
       return;
     }
     if (scope === 'config' || scope === 'all') {
@@ -214,6 +228,20 @@ function boot() {
   window.addEventListener('serein:state-adopted', () => {
     applyBackground(store.state);
     refreshClock();
+    // 另一个标签页把语言改成了别的值
+    setLocale(resolveLocale(store.state.config.language));
+  });
+
+  // 语言切换：就地重绘所有由脚本生成的文案，不刷新页面
+  onLocaleChange(() => {
+    applyStaticLabels();
+    updateSettingsButtonLabels();
+    renderTopbar(true);
+    refreshClock();
+    refreshSearchLocale();
+    refreshTilesLocale();
+    refreshWidgetsLocale();
+    scheduleDensity();
   });
 
   // 壁纸相关字段变动时重绘背景（设置页里已经直接调用，这里兜住其他入口）
@@ -234,12 +262,12 @@ function boot() {
     if (!restored) return;
     await applyBackground(store.state);
     refreshClock();
-    showToast({ text: '检测到本地缓存被清理，已从镜像恢复你的配置' });
+    showToast({ text: t('检测到本地缓存被清理，已从镜像恢复你的配置') });
   });
 
   if (!sessionStorage.getItem('serein:greeted')) {
     sessionStorage.setItem('serein:greeted', '1');
-    setTimeout(() => showToast({ text: '右键图标或空白处，随时编辑' }), 900);
+    setTimeout(() => showToast({ text: t('右键图标或空白处，随时编辑') }), 900);
   }
 }
 

@@ -11,6 +11,7 @@
 
 import { domainPalette, hostOf, normalizeUrl, hashString, hexToRgb, isSafeImageUrl } from './util.js';
 import { brandLogoUrl, brandSlugFor } from './brands.js';
+import { isEnglish } from './i18n.js';
 
 /* ------------------------------------------------------------ 品牌配色 */
 
@@ -340,7 +341,10 @@ export function resolveIcon(shortcut, { useFavicon = true, iconStyle = 'brand' }
 
   const brand = matchBrand(host);
   const baseColor = brand ? brand[0] : domainPalette(host || title || 'serein').solid;
-  const text = brand && brand[1] ? brand[1] : initialsOf(title, host);
+  // 英文界面不显示「百 / 哔 / 语」这类汉字徽标，退回标题或域名的拉丁缩写
+  const brandText =
+    brand && brand[1] && !(isEnglish() && /[\u3400-\u9fff]/.test(brand[1])) ? brand[1] : '';
+  const text = brandText || initialsOf(title, host);
 
   const fallback = {
     src: null,

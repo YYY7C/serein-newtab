@@ -51,6 +51,7 @@ CI 使用 Playwright 自带 Chromium。测试覆盖：
 - zip 备份 round-trip
 - 命令面板、自定义引擎、自定义 CSS / 字体 / 主题
 - 本地壁纸池与轮换、专注 / 世界时钟 / 倒计时
+- 英文界面（`test.use({ locale: 'en-US' })`）与词典覆盖率（源码 `t('…')` 扫描 + 占位符一致性）
 
 新增功能请同时补一条冒烟测试；修 UI 问题请附截图或复现步骤。未覆盖的部分与已知限制见 [docs/roadmap.md](docs/roadmap.md)。
 

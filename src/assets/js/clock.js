@@ -1,7 +1,8 @@
 /* Serein · 时钟与日期 */
 
 import { $, svgIcon } from './util.js';
-import { describeDate, WEEKDAYS } from './lunar.js';
+import { describeDate } from './lunar.js';
+import { t, isEnglish, formatDate } from './i18n.js';
 
 let els = null;
 let stateRef = null;
@@ -101,7 +102,10 @@ function tick(force = false) {
   if (layout.showGreeting) {
     const greeting = greetingFor(hh);
     const name = (layout.name || '').trim();
-    const text = name ? `${greeting.text}，${name}` : greeting.text;
+    const greetingText = t(greeting.text);
+    const text = name
+      ? t('{greeting}，{name}', { greeting: greetingText, name })
+      : greetingText;
     if (els.greeting.dataset.text !== text) {
       els.greeting.dataset.text = text;
       // 称呼是用户输入，必须走 textContent，避免把名字当成 HTML 解析
@@ -122,28 +126,27 @@ function tick(force = false) {
 
 function renderDateline(now, layout) {
   const parts = [];
+  let festival = '';
 
   if (layout.showDate) {
-    parts.push(`${now.getMonth() + 1}月${now.getDate()}日`);
-    parts.push(WEEKDAYS[now.getDay()]);
+    // 交给 Intl 处理语言差异：「11月24日」/「November 24」
+    parts.push(formatDate(now, { month: 'long', day: 'numeric' }));
+    parts.push(formatDate(now, { weekday: 'long' }));
   }
 
   if (layout.showLunar) {
     const info = describeDate(now);
-    if (info && info.text) parts.push(info.text);
-    if (info && info.festival) {
-      els.dateline.innerHTML = '';
-      parts.forEach((text, index) => {
-        if (index > 0) els.dateline.appendChild(makeDot());
-        els.dateline.appendChild(document.createTextNode(text));
-      });
-      if (parts.length) els.dateline.appendChild(makeDot());
-      const chip = document.createElement('span');
-      chip.className = 'festival';
-      chip.textContent = info.festival;
-      els.dateline.appendChild(chip);
-      return;
+    if (info?.lunar) {
+      const { month, day, isLeap } = info.lunar;
+      parts.push(
+        isEnglish()
+          ? t(isLeap ? '农历 {month}/{day}（闰月）' : '农历 {month}/{day}', { month, day })
+          : info.text
+      );
+    } else if (info?.text) {
+      parts.push(info.text);
     }
+    if (info?.festival) festival = t(info.festival);
   }
 
   els.dateline.innerHTML = '';
@@ -151,6 +154,13 @@ function renderDateline(now, layout) {
     if (index > 0) els.dateline.appendChild(makeDot());
     els.dateline.appendChild(document.createTextNode(text));
   });
+  if (festival) {
+    if (parts.length) els.dateline.appendChild(makeDot());
+    const chip = document.createElement('span');
+    chip.className = 'festival';
+    chip.textContent = festival;
+    els.dateline.appendChild(chip);
+  }
 }
 
 function makeDot() {

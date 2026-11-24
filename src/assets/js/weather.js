@@ -5,6 +5,8 @@
  */
 
 import { setWeather } from './store.js';
+import { searchLocalCities, hasCjk } from './city-search.js';
+import { t } from './i18n.js';
 
 const FORECAST_URL = 'https://api.open-meteo.com/v1/forecast';
 const GEO_URL = 'https://geocoding-api.open-meteo.com/v1/search';
@@ -47,7 +49,7 @@ const WMO = {
 const weatherEntry = (code) => (Object.hasOwn(WMO, code) ? WMO[code] : null);
 
 export function weatherLabel(code) {
-  return (weatherEntry(code) || ['未知', 'cloudy'])[0];
+  return t((weatherEntry(code) || ['未知', 'cloudy'])[0]);
 }
 
 export function weatherKind(code) {
@@ -203,17 +205,38 @@ export async function refreshWeather(state, { force = false } = {}) {
 
 /* -------------------------------------------------------------- 城市搜索 */
 
-export async function searchCity(query) {
+export async function searchCity(query, { signal } = {}) {
   const keyword = String(query || '').trim();
   if (!keyword) return [];
+
+  // 本地城市库覆盖中文、繁体和拼音；命中后不必再碰网络。
+  let local = [];
+  try {
+    local = await searchLocalCities(keyword, 8);
+  } catch (err) {
+    console.warn('[serein/weather] 本地城市搜索失败', err);
+  }
+  if (local.length) return local;
+  // Open-Meteo 不按中文主名检索，中文查不到时继续请求只会白等。
+  if (hasCjk(keyword)) return [];
+
   const params = new URLSearchParams({
     name: keyword,
     count: '6',
     language: 'zh',
     format: 'json',
   });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 7000);
+  const onAbort = () => controller.abort();
+  signal?.addEventListener('abort', onAbort, { once: true });
+  if (signal?.aborted) controller.abort();
+
   try {
-    const response = await fetch(`${GEO_URL}?${params.toString()}`, { credentials: 'omit' });
+    const response = await fetch(`${GEO_URL}?${params.toString()}`, {
+      credentials: 'omit',
+      signal: controller.signal,
+    });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     return (Array.isArray(data.results) ? data.results : [])
@@ -223,30 +246,44 @@ export async function searchCity(query) {
         const lon = Number(row.longitude);
         if (!Number.isFinite(lat) || lat < -90 || lat > 90) return null;
         if (!Number.isFinite(lon) || lon < -180 || lon > 180) return null;
+        const name = row.name.trim().slice(0, 40);
+        const region = [row.admin1, row.country]
+          .filter((part) => typeof part === 'string' && part)
+          .join(' · ')
+          .slice(0, 80);
         return {
-          name: row.name.trim().slice(0, 40),
-          region: [row.admin1, row.country].filter((part) => typeof part === 'string' && part).join(' · ').slice(0, 80),
+          name,
+          region,
+          // 远程结果没有本地中文索引，两种语言都先沿用 GeoNames 返回的名字
+          nameZh: name,
+          nameEn: name,
+          regionZh: region,
+          regionEn: region,
           lat,
           lon,
         };
       })
       .filter(Boolean);
   } catch (err) {
-    console.warn('[serein/weather] 城市搜索失败', err);
+    // 换关键词/关弹窗会主动 abort，这是正常流程，不刷警告。
+    if (err?.name !== 'AbortError') console.warn('[serein/weather] 城市搜索失败', err);
     return [];
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', onAbort);
   }
 }
 
-/** 常用城市快捷键 */
+/** 常用城市快捷键：name 存中文规范名，nameEn 供英文界面显示 */
 export const HOT_CITIES = [
-  { name: '北京', lat: 39.9042, lon: 116.4074 },
-  { name: '上海', lat: 31.2304, lon: 121.4737 },
-  { name: '广州', lat: 23.1291, lon: 113.2644 },
-  { name: '深圳', lat: 22.5431, lon: 114.0579 },
-  { name: '杭州', lat: 30.2741, lon: 120.1551 },
-  { name: '成都', lat: 30.5728, lon: 104.0668 },
-  { name: '武汉', lat: 30.5928, lon: 114.3055 },
-  { name: '西安', lat: 34.3416, lon: 108.9398 },
-  { name: '南京', lat: 32.0603, lon: 118.7969 },
-  { name: '重庆', lat: 29.563, lon: 106.5516 },
+  { name: '北京', nameEn: 'Beijing', lat: 39.9042, lon: 116.4074 },
+  { name: '上海', nameEn: 'Shanghai', lat: 31.2304, lon: 121.4737 },
+  { name: '广州', nameEn: 'Guangzhou', lat: 23.1291, lon: 113.2644 },
+  { name: '深圳', nameEn: 'Shenzhen', lat: 22.5431, lon: 114.0579 },
+  { name: '杭州', nameEn: 'Hangzhou', lat: 30.2741, lon: 120.1551 },
+  { name: '成都', nameEn: 'Chengdu', lat: 30.5728, lon: 104.0668 },
+  { name: '武汉', nameEn: 'Wuhan', lat: 30.5928, lon: 114.3055 },
+  { name: '西安', nameEn: "Xi'an", lat: 34.3416, lon: 108.9398 },
+  { name: '南京', nameEn: 'Nanjing', lat: 32.0603, lon: 118.7969 },
+  { name: '重庆', nameEn: 'Chongqing', lat: 29.563, lon: 106.5516 },
 ];

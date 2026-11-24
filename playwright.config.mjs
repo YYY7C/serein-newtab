@@ -11,6 +11,8 @@ export default defineConfig({
     baseURL: 'http://127.0.0.1:8123',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
+    // 现有用例断言中文文案；英文用例在文件内用 test.use({ locale: 'en-US' }) 覆盖
+    locale: process.env.PW_LOCALE || 'zh-CN',
     // 本地可复用系统 Edge，避免下载 Chromium：$env:PW_CHANNEL='msedge'; npm test
     channel: process.env.PW_CHANNEL || undefined,
   },

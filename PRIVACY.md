@@ -53,9 +53,9 @@
 | `duckduckgo.com` | 搜索联想开启且使用 DuckDuckGo 引擎时 | 输入的搜索词前缀 |
 | `s.search.bilibili.com` | 搜索联想开启且使用哔哩哔哩引擎时 | 输入的搜索词前缀 |
 | `api.open-meteo.com` | 天气小组件开启时 | 城市经纬度 |
-| `geocoding-api.open-meteo.com` | 在城市选择器里搜索城市时 | 输入的城市名 |
+| `geocoding-api.open-meteo.com` | 城市选择器里本地城市库没有结果，且输入为英文/拼音时 | 输入的城市名 |
 
-搜索联想可以在设置里关闭；关闭后不会发出任何联想请求。「最近搜索」只保存在本机，可在设置中关闭记录或清除。自定义 CSS 默认移除 `@import`；如果你自己在 CSS 里写 `url(https://…)`，浏览器会加载该地址，这是用户主动行为。
+搜索联想可以在设置里关闭；关闭后不会发出任何联想请求。「最近搜索」只保存在本机，可在设置中关闭记录或清除。城市选择器优先使用随扩展打包的 GeoNames 城市索引，中文、繁体、拼音命中时不会发起网络请求。自定义 CSS 默认移除 `@import`；如果你自己在 CSS 里写 `url(https://…)`，浏览器会加载该地址，这是用户主动行为。
 
 ## 五、权限用途
 
@@ -70,6 +70,7 @@
 ## 六、第三方
 
 - 天气数据由 [Open-Meteo](https://open-meteo.com/) 提供
+- 城市索引数据来自 [GeoNames](https://www.geonames.org/)，以 CC BY 4.0 许可随扩展打包；它只是本地文件，不会发起请求
 - 每日壁纸来自必应公开接口，版权归原作者，仅供个人欣赏
 
 本扩展与上述服务方没有数据合作，也不会向其提供任何用户信息。
@@ -90,4 +91,4 @@
 
 # Privacy Policy (English summary)
 
-Serein New Tab is a browser extension that **collects no user data**. There is no account, no server, no analytics, and no cloud sync. Settings, shortcuts, todos and notes live in your browser's `localStorage`; uploaded wallpapers and icons live in IndexedDB. Optional permissions (`bookmarks`, `topSites`, `tabs`, `history`) are only requested when you explicitly use those features and can be revoked in Settings. Network requests are limited to the hosts listed above (Bing wallpaper/suggestions, Baidu/360/Google/DuckDuckGo/Bilibili suggestions, Open-Meteo weather), and never include identifiers. Recent search terms stay in local storage and can be turned off or cleared in Settings. Contact: the GitHub issues link above.
+Serein New Tab is a browser extension that **collects no user data**. There is no account, no server, no analytics, and no cloud sync. Settings, shortcuts, todos and notes live in your browser's `localStorage`; uploaded wallpapers and icons live in IndexedDB. Optional permissions (`bookmarks`, `topSites`, `tabs`, `history`) are only requested when you explicitly use those features and can be revoked in Settings. Network requests are limited to the hosts listed above (Bing wallpaper/suggestions, Baidu/360/Google/DuckDuckGo/Bilibili suggestions, Open-Meteo weather), and never include identifiers. City search uses a bundled GeoNames index first (CC BY 4.0) and only falls back to Open-Meteo geocoding for unmatched English/pinyin queries. Recent search terms stay in local storage and can be turned off or cleared in Settings. Contact: the GitHub issues link above.

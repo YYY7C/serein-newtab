@@ -81,16 +81,18 @@ Serein 的做法是把上面几件事一次做对：
 
 **小组件（右侧栏，可左可隐藏）**
 
-- 天气：当前温度 / 体感 / 湿度 / 5 日预报，城市可搜索切换（Open-Meteo，无 Key）
-- 待办：勾选、删除、清除已完成
+- 天气：当前温度 / 体感 / 湿度 / 5 日预报，城市可搜索切换；内置 1600+ 城市的中文索引，支持中文、繁体、拼音和英文，中文搜索不发网络请求，未收录时再由 Open-Meteo 兜底
+- 待办：勾选、删除、清除已完成；没有已完成项时「清除」自动禁用
 - 便签：自动保存，**卡片弹性撑满侧栏剩余高度**（右列不会留空档）
 - **专注计时**：25 分钟专注 + 5 分钟休息，开始/暂停/重置，状态写进本地并跨标签页同步
 - **世界时钟**：最多 6 个城市，显示当地时间和「今天 / 明天 / 昨天」，城市可随时增删
 - **倒计时**：名称 + 目标时间，按天/时/分/秒显示，到时给出醒目提示
 - 书签 / 常去网站：按需申请权限，不授权就不出现
+- **侧栏体验**：重建小组件后保留滚动位置；底部渐隐 + 右侧细指示条提示还有内容；矮屏自动收紧卡片间距；窄屏变成可横滑的卡片带并适配底部安全区
 
 **壁纸与外观**
 
+- **中英双语界面**（设置 → 外观 → 界面语言）：自动跟随浏览器，或手动锁定简体中文 / English；切换就地生效、无需刷新，日期与数字改用对应 `Intl` 格式，城市同时保存中英文名
 - **六套视觉风格**（设置 → 外观）：轻玻璃 / 暗色材质 / 白纸 / 原色 / 编辑排版 / 终端。每套是完整的表层语言替换——色彩体系、表面材质、版面网格、图标呈现方式，而不只是换个颜色
 - **顶栏只留操作**：左上角不放字标、也不放图标，打开就是干净的壁纸；右上角的「侧边栏开关 + 设置」始终贴窗口右缘，侧边栏展开时与侧栏卡片右缘对齐
 - 壁纸来源：10 套离线 CSS 渐变 / 必应每日 / 图片链接 / **本地壁纸池**（最多 20 张）/ 纯色
@@ -201,7 +203,7 @@ Serein 的做法是把上面几件事一次做对：
 | `api.open-meteo.com` | 天气 |
 | `geocoding-api.open-meteo.com` | 城市搜索 |
 
-搜索联想可以在设置里关掉；关闭后不会请求任何联想接口。最近搜索只写在 `localStorage` 里，可以随时在设置中关闭记录或清除。城市搜索只在你打开城市选择器并输入关键词时请求。所有域名在 `manifest.json` 的 `host_permissions` 里显式列出，没有 `<all_urls>`。
+搜索联想可以在设置里关掉；关闭后不会请求任何联想接口。最近搜索只写在 `localStorage` 里，可以随时在设置中关闭记录或清除。城市搜索优先使用随扩展打包的 GeoNames 中文城市库（CC BY 4.0），本地命中时不发请求；只有本地没有结果、且输入是英文/拼音时才请求 `geocoding-api.open-meteo.com`。所有域名在 `manifest.json` 的 `host_permissions` 里显式列出，没有 `<all_urls>`。
 
 需要对外引用（例如提交到扩展商店）时，用 [PRIVACY.md](PRIVACY.md)：内容与本段一致，含中英双语。
 
@@ -240,7 +242,11 @@ src/
 │       ├── menu.js             右键菜单（单例）
 │       ├── modals.js           弹窗基座、快捷方式编辑器、确认/输入框
 │       ├── tiles.js            图标网格、文件夹、拖拽、右键菜单
-│       ├── weather.js          Open-Meteo 天气与城市搜索
+│       ├── weather.js          Open-Meteo 天气与城市搜索（本地优先 + 远程兜底）
+│       ├── city-search.js      本地城市库的中文 / 繁体 / 拼音 / 英文匹配
+│       ├── city-data.js        城市索引（GeoNames，按需加载）
+│       ├── i18n.js             语言解析、t()、Intl 格式与漏翻记录
+│       ├── locales/en.js       英文词典（键为中文原文）
 │       ├── widgets.js          天气 / 待办 / 便签 / 专注 / 世界时钟 / 倒计时 / 书签
 │       ├── settings.js         设置面板（8 个分区）
 │       ├── data.js             导入 / 导出 / 重置 / 用量 / 主题（zip 备份）
@@ -255,7 +261,7 @@ docs/
 ├── store-listing.md            商店文案与权限理由
 └── roadmap.md                  未完成功能、已知限制与待补测试
 
-tests/                          Playwright 测试（66 条：启动/搜索/文件夹/设置/风格/多标签页/备份/命令面板/字体/主题/壁纸池/新小组件/可访问性）
+tests/                          Playwright 测试（83 条：启动/搜索/文件夹/设置/风格/多标签页/备份/命令面板/字体/主题/壁纸池/新小组件/城市搜索/侧栏布局/英文界面/可访问性）
 scripts/package.ps1             打包上传用的 zip（产物在 dist/，不入库）
 .github/workflows/ci.yml        lint + 测试 + 打包
 .github/workflows/release.yml  打 tag 时生成 GitHub Release
@@ -280,7 +286,7 @@ $env:PW_CHANNEL = 'msedge'   # 本地复用系统 Edge，避免下载 Chromium
 npm test
 ```
 
-CI 会跑 lint + 66 条 Playwright 测试 + 打包，详细覆盖范围见 CONTRIBUTING.md 与 [docs/roadmap.md](docs/roadmap.md)。
+CI 会跑 lint + 83 条 Playwright 测试 + 打包，详细覆盖范围见 CONTRIBUTING.md 与 [docs/roadmap.md](docs/roadmap.md)。
 
 | 想改什么 | 改哪里 |
 |---|---|
@@ -353,4 +359,4 @@ CI 会跑 lint + 66 条 Playwright 测试 + 打包，详细覆盖范围见 CONTR
 代码以 [MIT](LICENSE) 许可发布。`src/assets/brand/` 下的品牌标识归各自所有者，不随 MIT 授权，详见 [assets/brand/NOTICE.md](src/assets/brand/NOTICE.md)。
 
 本项目为净室实现，未包含任何 GPL / AGPL 项目的代码。
-天气数据由 [Open-Meteo](https://open-meteo.com/) 提供；每日壁纸来自必应公开接口，版权归原作者。
+天气数据由 [Open-Meteo](https://open-meteo.com/) 提供；城市索引数据来自 [GeoNames](https://www.geonames.org/)（CC BY 4.0）；每日壁纸来自必应公开接口，版权归原作者。
