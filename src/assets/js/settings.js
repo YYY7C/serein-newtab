@@ -2019,6 +2019,8 @@ function engineEditor(engine = null) {
 
     setTimeout(() => {
       if (!nameInput.isConnected) return;
+      // 用户（或自动化）已经在弹窗内操作时不要抢焦点：否则快速填写另一字段会被打断
+      if (modal?.card?.contains(document.activeElement)) return;
       nameInput.focus({ preventScroll: true });
       if (engine) nameInput.select();
     }, 60);
